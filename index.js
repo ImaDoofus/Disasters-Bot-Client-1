@@ -1,9 +1,13 @@
 /// <reference types="../CTAutocomplete-2.0.4" />
 /// <reference lib="es2015" />
 
-const buttons = JSON.parse(FileLib.read('./config/ChatTriggers/modules/HousingBot/housing-data/button-data.json'));
-const maps = JSON.parse(FileLib.read('./config/ChatTriggers/modules/HousingBot/housing-data/map-templates.json'));
-const features = JSON.parse(FileLib.read('./config/ChatTriggers/modules/HousingBot/housing-data/features.json'));
+function getJsonFromFile(fileName) {
+    return JSON.parse(FileLib.read(`./config/ChatTriggers/modules/HousingBot/housing-data/${fileName}.json`));
+}
+
+const buttons = getJsonFromFile('button-data');
+const maps = getJsonFromFile('map-templates');
+const features = getJsonFromFile('features');
 
 // World.getAllPlayers().forEach(player => {
 //     player.getActivePotionEffects().forEach(potion => {
@@ -125,7 +129,7 @@ function processActions() {
             if (typeof commandCooldownLengths[type] === 'undefined') {
                 if (type === 'posa' || type === 'pos1') {
                     botSelection.posa = [Player.getX(),Player.getY(),Player.getZ()];
-                } else if (type === 'posb' || type === 'pos2') { 
+                } else if (type === 'posb' || type === 'pos2') {
                     botSelection.posb = [Player.getX(),Player.getY(),Player.getZ()];
                 }
                 ChatLib.say(commandsToRun[0].command);
@@ -155,9 +159,9 @@ function processActions() {
 
 function defaultCommandTimeoutCallback() {
     // console log the amount of players online, the amount of players in the arena and the timestamp
-    console.warn('Warning: Timeout for command: ' + this.command + ' has occurred.' + '\n' + 
-    '   Players online: ' + gameData.playersInHousing.length + '\n' + 
-    '   Players in arena: ' + gameData.playersInArena.length + '\n' + 
+    console.warn('Warning: Timeout for command: ' + this.command + ' has occurred.' + '\n' +
+    '   Players online: ' + gameData.playersInHousing.length + '\n' +
+    '   Players in arena: ' + gameData.playersInArena.length + '\n' +
     '   Timestamp: ' + new Date(Date.now()).toISOString());
 
 }
@@ -361,7 +365,7 @@ function loadFeature(featureName,pos) {
 //     runCommand(`/tp ${maps[mapName].corners[1].join(' ')}`)
 //     runCommand('/pos2')
 //     runCommand('/copy')
-    
+
 //     // Find best spot to put the map in the arena so the map is centered.
 
 //     var depthWidth = getMapDepth()[0]
@@ -379,7 +383,7 @@ function loadFeature(featureName,pos) {
 //                     runCommand(`/tp ${player.name} ${spawn[0]} ${spawn[1]} ${spawn[2]}`)
 //                 } else {
 //                     runCommand(`/tp ${player.name} -4.5 180 35`)
-//                 }    
+//                 }
 //             }
 //         }
 //     })
@@ -395,7 +399,7 @@ function loadFeature(featureName,pos) {
 
 
 
-
+// probably should be cached if possible
 
 function getMapDimensions() {
     var mapName = gameData.mapSelection;
@@ -430,24 +434,24 @@ function getArenaCenter() {
 function disasterTestSinkhole() {
     var centerX = getArenaCenter()[0];
     var centerZ = getArenaCenter()[1];
-    
+
     for (var i = 0; i < getMapDimensions()[0]/2; i++) {
         let dist = i; // https://dzone.com/articles/why-does-javascript-loop-only-use-last-value
         futureActions.push({
             run: function() {
                 var blockCount = getMostCommonBlocks(centerX+dist,arenaCorners[0][1],centerZ+dist,centerX-dist,arenaCorners[1][1],centerZ-dist);
-                
+
                 var sortable = [];
-                
+
                 for (block in blockCount) {
                     if (block === '13') continue;
                     sortable.push([block,blockCount[block]]);
                 }
-                
+
                 sortable.sort(function(a,b) {
                     return a[1] - b[1];
                 })
-                
+
                 console.log(JSON.stringify(sortable))
                 while (sortable.length > 0 && sortable[sortable.length-1][1] > dist * 8) {
                     console.log(sortable[sortable.length-1][0])
@@ -458,15 +462,15 @@ function disasterTestSinkhole() {
                     runCommand(`/replace ${sortable[sortable.length-1][0]} ${sortable[sortable.length-1][0]},gravel`);
                     sortable.pop();
                 }
-                
+
                 var uncommon = [];
-                
+
                 for (block in sortable) {
                     if (block[1] < dist * 2) {
                         uncommon.push(block[0]);
                     }
                 }
-                
+
                 if (dist % 4 === 0) {
                     if (uncommon.length > 0) {
                         runCommand(`/tp ${centerX+dist} 156 ${centerZ+dist}`)
@@ -476,7 +480,7 @@ function disasterTestSinkhole() {
                         runCommand(`/replace ${uncommon.join(',')} ${uncommon.join(',')},gravel`);
                     }
                 }
-                
+
             }
         })
     }
@@ -486,27 +490,27 @@ function disasterTestSinkhole() {
 function disasterTestAcidRain() {
     runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`);
     runCommand('/posa');
-    
+
     for (var i = 0; i < 15; i++) {
         let dist = i; // https://dzone.com/articles/why-does-javascript-loop-only-use-last-value
-        
+
         new Action({
             action: function() {
-                
+
                 var blockCount = getMostCommonBlocks(arenaCorners[0][0],arenaCorners[1][1],arenaCorners[0][2],arenaCorners[1][0],arenaCorners[1][1]-dist,arenaCorners[1][2]);
                 // console.log(JSON.stringify(blockCount))
-                
+
                 var sortable = [];
-                
+
                 for (block in blockCount) {
                     if (block === '95:5' || block === '95:13') continue;
                     sortable.push([block,blockCount[block]]);
                 }
-                
+
                 sortable.sort(function(a,b) {
                     return a[1] - b[1];
                 })
-                
+
                 for (var j = 0; j < 1; j++) {
                     if (sortable.length > 0) {
                         runCommand(`/tp ${arenaCorners[1][0]} ${arenaCorners[1][1]-dist} ${arenaCorners[1][2]}`);
@@ -516,19 +520,19 @@ function disasterTestAcidRain() {
                     }
                     sortable.pop();
                 }
-                
+
                 // Every 4 blocks remove the uncommon blocks
-                
+
                 var uncommon = [];
-                
+
                 for (block in sortable) {
                     if (block[1] < 30) {
                         uncommon.push(block[0]);
                     }
                 }
-                
+
                 // console.log('BLOCK COUNTS: '+JSON.stringify(blockCount))
-                
+
                 // if (dist % 4 === 0) {
                     //     if (uncommon.length > 0) {
                         //         runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`)
@@ -538,37 +542,37 @@ function disasterTestAcidRain() {
                 //         runCommand(`/replace ${uncommon.join(',')},95:5,95:13 95:5,95:13,0,0,0,0,0,0,0,0`);
                 //     }
                 // }
-                
+
             }
         })
     }
-    
+
 }
 // all the "disaster tests" code is old code i will update it later
 
 function disasterTestBlizzard() {
     runCommand('/weather raining')
     runCommand('/setbiome cold_taiga')
-    
+
     for (var i = 0; i < 39; i++) {
         let dist = i; // https://dzone.com/articles/why-does-javascript-loop-only-use-last-value
-        
+
         futureActions.push({
             run: function() {
                 var blockCount = getMostCommonBlocks(arenaCorners[0][0],arenaCorners[1][1],arenaCorners[0][2],arenaCorners[1][0],arenaCorners[1][1]-dist,arenaCorners[1][2]);
                 // console.log(JSON.stringify(blockCount))
-                
+
                 var sortable = [];
-                
+
                 for (block in blockCount) {
                     if (block === '80:' || block === '79:' || block === '174:') continue;
                     sortable.push([block,blockCount[block]]);
                 }
-                
+
                 sortable.sort(function(a,b) {
                     return a[1] - b[1];
                 })
-                
+
                 for (var j = 0; j < 2; j++) {
                     if (sortable.length > 0) {
                         runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`);
@@ -580,19 +584,19 @@ function disasterTestBlizzard() {
                     }
                     sortable.pop();
                 }
-                
+
                 // Every 4 blocks remove the uncommon blocks
-                
+
                 var uncommon = [];
-                
+
                 for (block in sortable) {
                     if (block[1] < 30) {
                         uncommon.push(block[0]);
                     }
                 }
-                
+
                 // console.log('BLOCK COUNTS: '+JSON.stringify(blockCount))
-                
+
                 if (dist % 4 === 0) {
                     if (uncommon.length > 0) {
                         runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`)
@@ -602,11 +606,11 @@ function disasterTestBlizzard() {
                         runCommand(`/replace ${uncommon.join(',')},80,79,174 80,79,174,0,0,0,0`);
                     }
                 }
-                
+
                 // if (Object.keys(blockCount).length !== 0) {
-                    
+
                     //     var max = Object.keys(blockCount).reduce((a, b) => blockCount[a] > blockCount[b] ? a : b);
-                    
+
                     //     // console.log(max)
                     //     runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`)
                     //     runCommand('/posa')
@@ -614,95 +618,89 @@ function disasterTestBlizzard() {
                     //     runCommand('/posb')
                     //     runCommand(`/replace ${max},95:5,95:13 ${max},95:5,95:13,0,0,0`);
                     //     console.log(max)
-                    //     // `/replace ${max},95:5,95:13,159:5,159:13 ${max},${max},${max},${max},${max},95:5,95:13,159:5,159:13,0` 
+                    //     // `/replace ${max},95:5,95:13,159:5,159:13 ${max},${max},${max},${max},${max},95:5,95:13,159:5,159:13,0`
                     // };
                 }
             })
         }
     }
     // all the "disaster tests" code is old code i will update it later
-    
-    function disasterTestSandstorm() {
-        runCommand('/setbiome desert')
-        
-        for (var k = 0; k < 1; k++) {
-            for (var i = 0; i < 39; i++) {
-                let dist = i; // https://dzone.com/articles/why-does-javascript-loop-only-use-last-value
-                
-                futureActions.push({
-                    run: function() {
-                        var blockCount = getMostCommonBlocks(arenaCorners[0][0],arenaCorners[1][1],arenaCorners[0][2],arenaCorners[1][0],arenaCorners[1][1]-dist,arenaCorners[1][2]);
-                        // console.log(JSON.stringify(blockCount))
-                        
-                        var sortable = [];
-                        
-                        for (block in blockCount) {
-                            if (block === '12:' || block === '24:') continue;
-                            sortable.push([block,blockCount[block]]);
-                        }
-                        
-                        sortable.sort(function(a,b) {
-                            return a[1] - b[1];
-                        })
-    
-                        for (var j = 0; j < 1; j++) {
-                            if (sortable.length > 0) {
-                            runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`);
-                            runCommand('/posa');
-                            runCommand(`/tp ${arenaCorners[1][0]} ${arenaCorners[1][1]-dist} ${arenaCorners[1][2]}`);
-                            runCommand('/posb');
-                            runCommand(`/replace ${sortable[sortable.length-1][0]} ${sortable[sortable.length-1][0]},12`);
-                            
-                        }
-                        sortable.pop();
-                    }
-    
-                    // Every 4 blocks remove the uncommon blocks
-                    
-                    var uncommon = [];
-                    
-                    for (block in sortable) {
-                        if (block[1] < 30) {
-                            uncommon.push(block[0]);
-                        }
-                    }
-    
-                    // console.log('BLOCK COUNTS: '+JSON.stringify(blockCount))
-                    
-                    if (dist % 4 === 0) {
-                        if (uncommon.length > 0) {
-                            runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`)
-                            runCommand('/posa')
-                            runCommand(`/tp ${arenaCorners[1][0]} ${arenaCorners[1][1]-dist} ${arenaCorners[1][2]}`)
-                            runCommand('/posb')
-                            runCommand(`/replace ${uncommon.join(',')},12,24 12,24,0,0,`);
-                            runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`);
-                            runCommand('/posa');
-                            runCommand(`/tp ${arenaCorners[1][0]} ${arenaCorners[1][1]} ${arenaCorners[1][2]}`);
-                            runCommand('/posb');
-                            runCommand(`/replace 0 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,12`);
-                        }
-                    }
-                    
-                    // if (Object.keys(blockCount).length !== 0) {
-                        
-                        //     var max = Object.keys(blockCount).reduce((a, b) => blockCount[a] > blockCount[b] ? a : b);
-                        
-                        //     // console.log(max)
-                        //     runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`)
-                        //     runCommand('/posa')
-                        //     runCommand(`/tp ${arenaCorners[1][0]} ${arenaCorners[1][1]-dist} ${arenaCorners[1][2]}`)
-                        //     runCommand('/posb')
-                        //     runCommand(`/replace ${max},95:5,95:13 ${max},95:5,95:13,0,0,0`);
-                        //     console.log(max)
-                    //     // `/replace ${max},95:5,95:13,159:5,159:13 ${max},${max},${max},${max},${max},95:5,95:13,159:5,159:13,0` 
-                    // };
-                }
-            })
+
+function disasterTestSandstorm() {
+  runCommand('/setbiome desert')
+
+  for (var i = 0; i < 39; i++) {
+    let dist = i; // https://dzone.com/articles/why-does-javascript-loop-only-use-last-value
+
+    futureActions.push({
+      run: function() {
+        var blockCount = getMostCommonBlocks(arenaCorners[0][0],arenaCorners[1][1],arenaCorners[0][2],arenaCorners[1][0],arenaCorners[1][1]-dist,arenaCorners[1][2]);
+        // console.log(JSON.stringify(blockCount))
+
+        var sortable = [];
+
+        for (block in blockCount) {
+            if (block === '12:' || block === '24:') continue;
+            sortable.push([block,blockCount[block]]);
         }
-        
-    }
-    
+
+        sortable.sort(function(a,b) {
+            return a[1] - b[1];
+        });
+
+        if (sortable.length > 0) {
+            runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`);
+            runCommand('/posa');
+            runCommand(`/tp ${arenaCorners[1][0]} ${arenaCorners[1][1]-dist} ${arenaCorners[1][2]}`);
+            runCommand('/posb');
+            runCommand(`/replace ${sortable[sortable.length-1][0]} ${sortable[sortable.length-1][0]},12`);
+
+            sortable.pop();
+        }
+
+        // Every 4 blocks remove the uncommon blocks
+
+        var uncommon = [];
+
+        for (block in sortable) {
+            if (block[1] < 30) {
+                uncommon.push(block[0]);
+            }
+        }
+
+        // console.log('BLOCK COUNTS: '+JSON.stringify(blockCount))
+
+        if (dist % 4 === 0) {
+            if (uncommon.length > 0) {
+                runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`)
+                runCommand('/posa')
+                runCommand(`/tp ${arenaCorners[1][0]} ${arenaCorners[1][1]-dist} ${arenaCorners[1][2]}`)
+                runCommand('/posb')
+                runCommand(`/replace ${uncommon.join(',')},12,24 12,24,0,0,`);
+                runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`);
+                runCommand('/posa');
+                runCommand(`/tp ${arenaCorners[1][0]} ${arenaCorners[1][1]} ${arenaCorners[1][2]}`);
+                runCommand('/posb');
+                runCommand(`/replace 0 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,12`);
+            }
+        }
+
+        // if (Object.keys(blockCount).length !== 0) {
+
+            //     var max = Object.keys(blockCount).reduce((a, b) => blockCount[a] > blockCount[b] ? a : b);
+
+            //     // console.log(max)
+            //     runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`)
+            //     runCommand('/posa')
+            //     runCommand(`/tp ${arenaCorners[1][0]} ${arenaCorners[1][1]-dist} ${arenaCorners[1][2]}`)
+            //     runCommand('/posb')
+            //     runCommand(`/replace ${max},95:5,95:13 ${max},95:5,95:13,0,0,0`);
+            //     console.log(max)
+        //     // `/replace ${max},95:5,95:13,159:5,159:13 ${max},${max},${max},${max},${max},95:5,95:13,159:5,159:13,0`
+        // };
+      }
+    })
+  }
 }
 
 // all the "disaster tests" code is old code i will update it later
@@ -712,20 +710,23 @@ function disasterTestFlood() {
     var mapHeight = getMapDimensions()[1];
     var mapLength = getMapDimensions()[2];
     console.log(mapLength,mapWidth)
-    
+
+    // only copy once lol
+    futureActions.push({
+        run: function() {
+            runCommand('/tp -5 95 -38');
+            runCommand('/posa');
+            runCommand(`/tp -53 95 10`);
+            runCommand('/posb');
+            runCommand('/copy');
+        }
+    })
+
     for (var i = 0; i < mapHeight-5; i++) {
         let dist = i; // https://dzone.com/articles/why-does-javascript-loop-only-use-last-value
-        
+
         futureActions.push({
             run: function() {
-                
-                
-                runCommand('/tp -5 95 -38')
-                runCommand('/posa')
-                runCommand(`/tp -53 95 10`)
-                runCommand('/posb')
-                runCommand('/copy')
-                
                 runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[0][1]+dist} ${arenaCorners[0][2]}`)
                 runCommand('/paste')
             }
@@ -739,19 +740,22 @@ function disasterTestLavaFlood() {
     var mapHeight = getMapDimensions()[1];
     var mapLength = getMapDimensions()[2];
 
+    futureActions.push({
+        run: function() {
+            runCommand('/tp -5 97 -38')
+            runCommand('/posa')
+            runCommand(`/tp -53 97 10`)
+            runCommand('/posb')
+            runCommand('/copy')
+        }
+    })
+
+
     for (var i = 0; i < mapHeight-5; i++) {
         let dist = i; // https://dzone.com/articles/why-does-javascript-loop-only-use-last-value
 
         futureActions.push({
             run: function() {
-
-
-                runCommand('/tp -5 97 -38')
-                runCommand('/posa')
-                runCommand(`/tp -53 97 10`)
-                runCommand('/posb')
-                runCommand('/copy')
-
                 runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[0][1]+dist} ${arenaCorners[0][2]}`)
                 runCommand('/paste')
             }
@@ -767,16 +771,14 @@ function disasterTestLavaFalls() {
 
     futureActions.push({
         run: function() {
+            runCommand('/tp -5 97 -38');
+            runCommand('/posa');
+            runCommand(`/tp -53 97 10`);
+            runCommand('/posb');
+            runCommand('/copy');
 
-
-            runCommand('/tp -5 97 -38')
-            runCommand('/posa')
-            runCommand(`/tp -53 97 10`)
-            runCommand('/posb')
-            runCommand('/copy')
-
-            runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`)
-            runCommand('/paste')
+            runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`);
+            runCommand('/paste');
         }
     })
 
@@ -802,7 +804,7 @@ const colorMapping = {
     'color=black': 15
 }
 
-const variantMapping = {
+const woodMapping = {
     'variant=oak': 0,
     'variant=spruce': 1,
     'variant=birch': 2,
@@ -841,64 +843,98 @@ excludedBlocks = [
     97, // stone monster egg
 ]
 
-// this function is helpful for disasters like sinkhole where you want to replace the most common blocks 
+// colorBlocks are blocks that have color metadata
+colorBlocks = [
+  35, // wool
+  159, // terracotta
+  95, // stained glass
+  160 // stained glass pane
+]
+
+// woodBlocks are blocks that have wood metadata
+woodBlocks = [
+  5, // planks
+  17, // log
+  18, // leaves somehow
+  126 // slabs
+]
+
+// this function is helpful for disasters like sinkhole where you want to replace the most common blocks
 function getMostCommonBlocks(x1,y1,z1,x2,y2,z2) {
     var blockCount = {};
 
-    for (var x = 0; x < Math.abs(x1-x2); x++) {
-        for (var y = 0; y < Math.abs(y1-y2); y++) {
-            for (var z = 0; z < Math.abs(z1-z2); z++) {
-                var block = World.getBlockAt(x1+Math.sign(x2-x1)*x,y1+Math.sign(y2-y1)*y,z1+Math.sign(z2-z1)*z)
-                // console.log(x1+Math.sign(x2-x1)*x,y1+Math.sign(y2-y1)*y,z1+Math.sign(z2-z1)*z)
-                
-                // check if block id is in the excludedBlocks array
-                if (excludedBlocks.indexOf(block.getType().getID()) == -1) continue;
+    // swap values
 
-                var blockColor = '';
+    if (x1 > x2) {
+      let temp = x1;
+      x1 = x2;
+      x2 = temp;
+    }
+
+    if (y1 > y2) {
+      let temp = y1;
+      y1 = y2;
+      y2 = temp;
+    }
+
+    if (z1 > z2) {
+      let temp = z1;
+      z1 = z2;
+      z2 = temp;
+    }
+
+    for (var x = x1; x < x2; x++) {
+        for (var y = y1; y < y2; y++) {
+            for (var z = z1; z < z2; z++) {
+                var block = World.getBlockAt(x,y,z)
+                // console.log(x1+Math.sign(x2-x1)*x,y1+Math.sign(y2-y1)*y,z1+Math.sign(z2-z1)*z)
+
+                const id = block.getType().getID();
+
+                // check if block id is in the excludedBlocks array
+                if (excludedBlocks.indexOf(id) != -1) continue;
+
                 var blockVariant = '';
 
-                if (block.getType().getID() === 35 || block.getType().getID() === 159 || block.getType().getID() === 95 || block.getType().getID() === 160 ) {
+                // get rid of duplicate code, maybe extract to separate method
+                // also maybe better regex
+                if (colorBlocks.indexOf(id) != -1) {
                     for(color in colorMapping) {
                         var metadata = block.getState().toString().match(/\[(.*?)\]/)
                         if (metadata) {
                             if (metadata[1].includes(color)) {
-                                blockColor = colorMapping[color];
+                                blockVariant = colorMapping[color];
                                 break;
                             }
                         }
                     }
-                }
-
-                if (block.getType().getID() === 5 || block.getType().getID() === 17 || block.getType().getID() === 18 || block.getType().getID() === 126) {
-                    for(variant in variantMapping) {
+                } else if (woodBlocks.indexOf(id) != -1) {
+                    for(variant in woodMapping) {
                         var metadata = block.getState().toString().match(/\[(.*?)\]/)
                         if (metadata) {
                             if (metadata[1].includes(variant)) {
-                                blockVariant = variantMapping[variant];
+                                blockVariant = woodMapping[variant];
                                 break;
                             }
                         }
-                    }    
-                }
-
-                if (block.getType().getID() === 44) {
+                    }
+                } else if (block.getType().getID() === 44) {
                     for(slab in slabMapping) {
                         var metadata = block.getState().toString().match(/\[(.*?)\]/)
-
                         if (metadata) {
                             if (metadata[1].includes(slab)) {
                                 blockVariant = slabMapping[slab];
                                 break;
                             }
                         }
-                    }    
+                    }
                 }
-                
-                var protoolSafe = block.getType().getID()+':'+blockColor+blockVariant;
-                if (protoolSafe in blockCount) {
-                    blockCount[protoolSafe]++
+
+                var protoolId = block.getType().getID()+':'+blockVariant;
+                if (protoolId in blockCount) {
+                    blockCount[protoolId]++
                 } else {
-                    blockCount[protoolSafe] = 1;
+                    blockCount[protoolId] = 1;
                 }
             }
         }
@@ -921,7 +957,6 @@ function setPlayerDisplay() {
                 console.log(`/tp -50 175 ${centerBlock(47-playerCount[0])}`)
 
                 runCommand(`/tp -50 175 ${centerBlock(47-playerCount[0])}`)
-
             }
         }
     })
@@ -967,7 +1002,7 @@ function centerBlock(num) {
     // center number to nearest 0.5
     // this took way longer than it should have
     const rem = num % 1;
-    
+
     if (rem != 0) { // if num is decimal
         return (num < 0 ? Math.floor(num * 2) / 2 : Math.ceil(num * 2) / 2);
     } else {
