@@ -1,0 +1,14 @@
+{
+    "4x4 test1": {
+        "corners": [[46, 100, 2],[43, 103, 5]],
+        "double_paste": true
+    },
+    "4x4 test2": {
+        "corners": [[46, 100, 6],[43, 103, 9]],
+        "double_paste": false
+    },
+    "4x4 test3": {
+        "corners": [[46, 100, 10],[43, 103, 13]],
+        "double_paste": true
+    }
+}
