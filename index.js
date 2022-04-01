@@ -67,26 +67,15 @@ class Action {
     }
 }
 
+// action example
+
 // new Action({
-//     action: function() {
-//         runCommand('/tp -8 187 17')
-//         runCommand('/posa')
-//         runCommand('/tp -12 187 12')
-//         runCommand('/posb')
-//         runCommand('/set stone')
-//         runCommand('/set lapis_block')
-//         runCommand('/set diamond_block')
-//         runCommand('/tp imadoofus sirhax',true)
-//         runCommand('/tp imadoofus sirhax',true)
-//         runCommand('/tp imadoofus sirhax',true)
-//         runCommand('/tp imadoofus sirhax',true)
-//         runCommand('/tp imadoofus sirhax',true)
-//         runCommand('/tp imadoofus sirhax',true)
-//         runCommand('/tp imadoofus sirhax',true)
-//         runCommand('/tp imadoofus sirhax',true)
+//     action: () => {
+//         World.getAllPlayers().forEach(player => {
+//             runCommand(`/tp ${player.getName()} 0 0 0`)
+//         })
 //     }
 // })
-
 
 var commandsToRun = [];
 var commandLastRan = 0;
@@ -108,6 +97,7 @@ var commandCooldownLengths = {
 
 function processActions() {
 
+    // if there are no commands to run, run the next action
     if (commandsToRun.length === 0) {
         if (futureActions.length > 0) {
             futureActions[0].run();
@@ -115,6 +105,7 @@ function processActions() {
         }
     }
 
+    // if a command gets timed out, run the timeout callback and remove the command from the queue
     commandsToRun.forEach(command => {
         if (command.pushed + command.timeout < Date.now()) {
             if (command.timeoutCallback) {
@@ -127,6 +118,7 @@ function processActions() {
 
     if (commandsToRun.length > 0) {
 
+        // minimum time between commands is 1 second
         if ((Date.now() - commandLastRan) > 1000) {
 
             let type = commandsToRun[0].command.split(' ')[0].replace(/\//g,'');
@@ -357,9 +349,9 @@ function loadFeature(featureName,pos) {
         runCommand('/paste')
     }
 }
-loadFeature('4x4 test1',[-5, 180, 14+5])
-loadFeature('4x4 test2',[-5, 180, 14+10])
-loadFeature('4x4 test3',[-5, 180, 14+15])
+// loadFeature('4x4 test1',[-5, 180, 14+5])
+// loadFeature('4x4 test2',[-5, 180, 14+10])
+// loadFeature('4x4 test3',[-5, 180, 14+15])
 
 // function loadMap() {
 //     var mapName = gameData.mapSelection;
@@ -432,27 +424,30 @@ function getArenaCenter() {
 }
 
 
+// all the "disaster tests" code is old code i will update it later
+
+
 function disasterTestSinkhole() {
     var centerX = getArenaCenter()[0];
     var centerZ = getArenaCenter()[1];
-
+    
     for (var i = 0; i < getMapDimensions()[0]/2; i++) {
         let dist = i; // https://dzone.com/articles/why-does-javascript-loop-only-use-last-value
         futureActions.push({
             run: function() {
                 var blockCount = getMostCommonBlocks(centerX+dist,arenaCorners[0][1],centerZ+dist,centerX-dist,arenaCorners[1][1],centerZ-dist);
-
+                
                 var sortable = [];
-
+                
                 for (block in blockCount) {
                     if (block === '13') continue;
                     sortable.push([block,blockCount[block]]);
                 }
-
+                
                 sortable.sort(function(a,b) {
                     return a[1] - b[1];
                 })
-
+                
                 console.log(JSON.stringify(sortable))
                 while (sortable.length > 0 && sortable[sortable.length-1][1] > dist * 8) {
                     console.log(sortable[sortable.length-1][0])
@@ -463,15 +458,15 @@ function disasterTestSinkhole() {
                     runCommand(`/replace ${sortable[sortable.length-1][0]} ${sortable[sortable.length-1][0]},gravel`);
                     sortable.pop();
                 }
-
+                
                 var uncommon = [];
-
+                
                 for (block in sortable) {
                     if (block[1] < dist * 2) {
                         uncommon.push(block[0]);
                     }
                 }
-
+                
                 if (dist % 4 === 0) {
                     if (uncommon.length > 0) {
                         runCommand(`/tp ${centerX+dist} 156 ${centerZ+dist}`)
@@ -481,36 +476,37 @@ function disasterTestSinkhole() {
                         runCommand(`/replace ${uncommon.join(',')} ${uncommon.join(',')},gravel`);
                     }
                 }
-
+                
             }
         })
     }
 }
 
+// all the "disaster tests" code is old code i will update it later
 function disasterTestAcidRain() {
     runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`);
     runCommand('/posa');
-
+    
     for (var i = 0; i < 15; i++) {
         let dist = i; // https://dzone.com/articles/why-does-javascript-loop-only-use-last-value
-
+        
         new Action({
             action: function() {
-
+                
                 var blockCount = getMostCommonBlocks(arenaCorners[0][0],arenaCorners[1][1],arenaCorners[0][2],arenaCorners[1][0],arenaCorners[1][1]-dist,arenaCorners[1][2]);
                 // console.log(JSON.stringify(blockCount))
-
+                
                 var sortable = [];
-
+                
                 for (block in blockCount) {
                     if (block === '95:5' || block === '95:13') continue;
                     sortable.push([block,blockCount[block]]);
                 }
-
+                
                 sortable.sort(function(a,b) {
                     return a[1] - b[1];
                 })
-
+                
                 for (var j = 0; j < 1; j++) {
                     if (sortable.length > 0) {
                         runCommand(`/tp ${arenaCorners[1][0]} ${arenaCorners[1][1]-dist} ${arenaCorners[1][2]}`);
@@ -520,58 +516,59 @@ function disasterTestAcidRain() {
                     }
                     sortable.pop();
                 }
-
+                
                 // Every 4 blocks remove the uncommon blocks
-
+                
                 var uncommon = [];
-
+                
                 for (block in sortable) {
                     if (block[1] < 30) {
                         uncommon.push(block[0]);
                     }
                 }
-
+                
                 // console.log('BLOCK COUNTS: '+JSON.stringify(blockCount))
-
+                
                 // if (dist % 4 === 0) {
-                //     if (uncommon.length > 0) {
-                //         runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`)
-                //         runCommand('/posa')
-                //         runCommand(`/tp ${arenaCorners[1][0]} ${arenaCorners[1][1]-dist} ${arenaCorners[1][2]}`)
+                    //     if (uncommon.length > 0) {
+                        //         runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`)
+                        //         runCommand('/posa')
+                        //         runCommand(`/tp ${arenaCorners[1][0]} ${arenaCorners[1][1]-dist} ${arenaCorners[1][2]}`)
                 //         runCommand('/posb')
                 //         runCommand(`/replace ${uncommon.join(',')},95:5,95:13 95:5,95:13,0,0,0,0,0,0,0,0`);
                 //     }
                 // }
-
+                
             }
         })
     }
-
+    
 }
+// all the "disaster tests" code is old code i will update it later
 
 function disasterTestBlizzard() {
     runCommand('/weather raining')
     runCommand('/setbiome cold_taiga')
-
+    
     for (var i = 0; i < 39; i++) {
         let dist = i; // https://dzone.com/articles/why-does-javascript-loop-only-use-last-value
-
+        
         futureActions.push({
             run: function() {
                 var blockCount = getMostCommonBlocks(arenaCorners[0][0],arenaCorners[1][1],arenaCorners[0][2],arenaCorners[1][0],arenaCorners[1][1]-dist,arenaCorners[1][2]);
                 // console.log(JSON.stringify(blockCount))
-
+                
                 var sortable = [];
-
+                
                 for (block in blockCount) {
                     if (block === '80:' || block === '79:' || block === '174:') continue;
                     sortable.push([block,blockCount[block]]);
                 }
-
+                
                 sortable.sort(function(a,b) {
                     return a[1] - b[1];
                 })
-
+                
                 for (var j = 0; j < 2; j++) {
                     if (sortable.length > 0) {
                         runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`);
@@ -583,19 +580,19 @@ function disasterTestBlizzard() {
                     }
                     sortable.pop();
                 }
-
+                
                 // Every 4 blocks remove the uncommon blocks
-
+                
                 var uncommon = [];
-
+                
                 for (block in sortable) {
                     if (block[1] < 30) {
                         uncommon.push(block[0]);
                     }
                 }
-
+                
                 // console.log('BLOCK COUNTS: '+JSON.stringify(blockCount))
-
+                
                 if (dist % 4 === 0) {
                     if (uncommon.length > 0) {
                         runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`)
@@ -605,64 +602,65 @@ function disasterTestBlizzard() {
                         runCommand(`/replace ${uncommon.join(',')},80,79,174 80,79,174,0,0,0,0`);
                     }
                 }
-
+                
                 // if (Object.keys(blockCount).length !== 0) {
-
-                //     var max = Object.keys(blockCount).reduce((a, b) => blockCount[a] > blockCount[b] ? a : b);
-        
-                //     // console.log(max)
-                //     runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`)
-                //     runCommand('/posa')
-                //     runCommand(`/tp ${arenaCorners[1][0]} ${arenaCorners[1][1]-dist} ${arenaCorners[1][2]}`)
-                //     runCommand('/posb')
-                //     runCommand(`/replace ${max},95:5,95:13 ${max},95:5,95:13,0,0,0`);
-                //     console.log(max)
-                //     // `/replace ${max},95:5,95:13,159:5,159:13 ${max},${max},${max},${max},${max},95:5,95:13,159:5,159:13,0` 
-                // };
-            }
-        })
+                    
+                    //     var max = Object.keys(blockCount).reduce((a, b) => blockCount[a] > blockCount[b] ? a : b);
+                    
+                    //     // console.log(max)
+                    //     runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`)
+                    //     runCommand('/posa')
+                    //     runCommand(`/tp ${arenaCorners[1][0]} ${arenaCorners[1][1]-dist} ${arenaCorners[1][2]}`)
+                    //     runCommand('/posb')
+                    //     runCommand(`/replace ${max},95:5,95:13 ${max},95:5,95:13,0,0,0`);
+                    //     console.log(max)
+                    //     // `/replace ${max},95:5,95:13,159:5,159:13 ${max},${max},${max},${max},${max},95:5,95:13,159:5,159:13,0` 
+                    // };
+                }
+            })
+        }
     }
-}
-
-function disasterTestSandstorm() {
-    runCommand('/setbiome desert')
-
-    for (var k = 0; k < 1; k++) {
-        for (var i = 0; i < 39; i++) {
-            let dist = i; // https://dzone.com/articles/why-does-javascript-loop-only-use-last-value
+    // all the "disaster tests" code is old code i will update it later
     
-            futureActions.push({
-                run: function() {
-                    var blockCount = getMostCommonBlocks(arenaCorners[0][0],arenaCorners[1][1],arenaCorners[0][2],arenaCorners[1][0],arenaCorners[1][1]-dist,arenaCorners[1][2]);
-                    // console.log(JSON.stringify(blockCount))
+    function disasterTestSandstorm() {
+        runCommand('/setbiome desert')
+        
+        for (var k = 0; k < 1; k++) {
+            for (var i = 0; i < 39; i++) {
+                let dist = i; // https://dzone.com/articles/why-does-javascript-loop-only-use-last-value
+                
+                futureActions.push({
+                    run: function() {
+                        var blockCount = getMostCommonBlocks(arenaCorners[0][0],arenaCorners[1][1],arenaCorners[0][2],arenaCorners[1][0],arenaCorners[1][1]-dist,arenaCorners[1][2]);
+                        // console.log(JSON.stringify(blockCount))
+                        
+                        var sortable = [];
+                        
+                        for (block in blockCount) {
+                            if (block === '12:' || block === '24:') continue;
+                            sortable.push([block,blockCount[block]]);
+                        }
+                        
+                        sortable.sort(function(a,b) {
+                            return a[1] - b[1];
+                        })
     
-                    var sortable = [];
-    
-                    for (block in blockCount) {
-                        if (block === '12:' || block === '24:') continue;
-                        sortable.push([block,blockCount[block]]);
-                    }
-    
-                    sortable.sort(function(a,b) {
-                        return a[1] - b[1];
-                    })
-    
-                    for (var j = 0; j < 1; j++) {
-                        if (sortable.length > 0) {
+                        for (var j = 0; j < 1; j++) {
+                            if (sortable.length > 0) {
                             runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`);
                             runCommand('/posa');
                             runCommand(`/tp ${arenaCorners[1][0]} ${arenaCorners[1][1]-dist} ${arenaCorners[1][2]}`);
                             runCommand('/posb');
                             runCommand(`/replace ${sortable[sortable.length-1][0]} ${sortable[sortable.length-1][0]},12`);
-
+                            
                         }
                         sortable.pop();
                     }
     
                     // Every 4 blocks remove the uncommon blocks
-    
+                    
                     var uncommon = [];
-    
+                    
                     for (block in sortable) {
                         if (block[1] < 30) {
                             uncommon.push(block[0]);
@@ -670,7 +668,7 @@ function disasterTestSandstorm() {
                     }
     
                     // console.log('BLOCK COUNTS: '+JSON.stringify(blockCount))
-    
+                    
                     if (dist % 4 === 0) {
                         if (uncommon.length > 0) {
                             runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`)
@@ -685,48 +683,49 @@ function disasterTestSandstorm() {
                             runCommand(`/replace 0 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,12`);
                         }
                     }
-    
+                    
                     // if (Object.keys(blockCount).length !== 0) {
-    
-                    //     var max = Object.keys(blockCount).reduce((a, b) => blockCount[a] > blockCount[b] ? a : b);
-            
-                    //     // console.log(max)
-                    //     runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`)
-                    //     runCommand('/posa')
-                    //     runCommand(`/tp ${arenaCorners[1][0]} ${arenaCorners[1][1]-dist} ${arenaCorners[1][2]}`)
-                    //     runCommand('/posb')
-                    //     runCommand(`/replace ${max},95:5,95:13 ${max},95:5,95:13,0,0,0`);
-                    //     console.log(max)
+                        
+                        //     var max = Object.keys(blockCount).reduce((a, b) => blockCount[a] > blockCount[b] ? a : b);
+                        
+                        //     // console.log(max)
+                        //     runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`)
+                        //     runCommand('/posa')
+                        //     runCommand(`/tp ${arenaCorners[1][0]} ${arenaCorners[1][1]-dist} ${arenaCorners[1][2]}`)
+                        //     runCommand('/posb')
+                        //     runCommand(`/replace ${max},95:5,95:13 ${max},95:5,95:13,0,0,0`);
+                        //     console.log(max)
                     //     // `/replace ${max},95:5,95:13,159:5,159:13 ${max},${max},${max},${max},${max},95:5,95:13,159:5,159:13,0` 
                     // };
                 }
             })
         }
-    
+        
     }
-
+    
 }
 
+// all the "disaster tests" code is old code i will update it later
 
 function disasterTestFlood() {
     var mapWidth = getMapDimensions()[0];
     var mapHeight = getMapDimensions()[1];
     var mapLength = getMapDimensions()[2];
     console.log(mapLength,mapWidth)
-
+    
     for (var i = 0; i < mapHeight-5; i++) {
         let dist = i; // https://dzone.com/articles/why-does-javascript-loop-only-use-last-value
-
+        
         futureActions.push({
             run: function() {
-
-
+                
+                
                 runCommand('/tp -5 95 -38')
                 runCommand('/posa')
                 runCommand(`/tp -53 95 10`)
                 runCommand('/posb')
                 runCommand('/copy')
-
+                
                 runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[0][1]+dist} ${arenaCorners[0][2]}`)
                 runCommand('/paste')
             }
@@ -734,6 +733,7 @@ function disasterTestFlood() {
     }
 }
 
+// all the "disaster tests" code is old code i will update it later
 function disasterTestLavaFlood() {
     var mapWidth = getMapDimensions()[0];
     var mapHeight = getMapDimensions()[1];
@@ -758,6 +758,7 @@ function disasterTestLavaFlood() {
         })
     }
 }
+// all the "disaster tests" code is old code i will update it later
 
 function disasterTestLavaFalls() {
     var mapWidth = getMapDimensions()[0];
@@ -840,6 +841,7 @@ excludedBlocks = [
     97, // stone monster egg
 ]
 
+// this function is helpful for disasters like sinkhole where you want to replace the most common blocks 
 function getMostCommonBlocks(x1,y1,z1,x2,y2,z2) {
     var blockCount = {};
 
@@ -904,18 +906,28 @@ function getMostCommonBlocks(x1,y1,z1,x2,y2,z2) {
     return blockCount;
 }
 
-// console.log(JSON.stringify(getMostCommonBlocks(-7,182,42,-10,183,45)))
-
+// teleport the bot to activate redstone that sets the display
 function setPlayerDisplay() {
-    World.getAllPlayers().forEach(player => {
-        var totalInArea = 0;
-        if (coordsInArea(arenaCorners[0],arenaCorners[1],[player.x,player.y,player.z])) {
-            totalInArea++;
+    new Action({
+        action: function() {
+            // const playerCount = gameData.playersInArena.length.toString();
+            const playerCount = '15'
+            console.log(playerCount)
+            console.log(`/tp -50 175 ${28-centerBlock(parseInt(playerCount[playerCount.length-1]))}`)
+
+            runCommand(`/tp -50 175 ${28-centerBlock(parseInt(playerCount[playerCount.length-1]))}`)
+
+            if (playerCount.length > 1) { // if double digits
+                console.log(`/tp -50 175 ${centerBlock(47-playerCount[0])}`)
+
+                runCommand(`/tp -50 175 ${centerBlock(47-playerCount[0])}`)
+
+            }
         }
-        playerCount = totalInArea.toString();
-        
     })
 }
+
+setPlayerDisplay();
 
 // function checkIfGameReady() {
 //     // return true if there are more than 5 players in the world and if it has been at least 30 seconds since the last game
