@@ -1,9 +1,14 @@
 /// <reference types="../CTAutocomplete-2.0.4" />
 /// <reference lib="es2015" />
 
-const buttons = JSON.parse(FileLib.read('./config/ChatTriggers/modules/HousingBot/housing-data/button-data.json'));
-const maps = JSON.parse(FileLib.read('./config/ChatTriggers/modules/HousingBot/housing-data/map-templates.json'));
-const features = JSON.parse(FileLib.read('./config/ChatTriggers/modules/HousingBot/housing-data/features.json'));
+function getJsonFromFile(fileName) {
+    return JSON.parse(FileLib.read(`./config/ChatTriggers/modules/HousingBot/housing-data/${fileName}.json`));
+}
+
+const buttons = getJsonFromFile('button-data');
+const maps = getJsonFromFile('map-templates');
+const features = getJsonFromFile('features');
+
 
 // World.getAllPlayers().forEach(player => {
 //     player.getActivePotionEffects().forEach(potion => {
@@ -46,15 +51,23 @@ const features = JSON.parse(FileLib.read('./config/ChatTriggers/modules/HousingB
 
 var botSelection = {posa: [], posb: []};
 
+var gameLoop = false;
+
 var gameData = {
-    mapSelection: 'mario_kart',
+    mapSelection: null,
     previousMap: null,
-    lastActiveGameTimestamp: null,
+    lastGameTick: null,
+    gameTick: 0,
+    gameStartTimestamp: null,
+    gameRunning: false,
+    gameLength: 1000 * 30, // 7 seconds
     playersInHousing: [],
     playersInArena: [],
 }
 
-const arenaCorners = [[19.5,160,-7.5],[-40.5,195,52.5]]
+gameData.mapSelection = getRandomMap();
+
+const arenaCorners = [[19,160,-8],[-40,195,51]]
 const arenaWidth = Math.abs(arenaCorners[0][0]-arenaCorners[1][0]);
 const arenaLength = Math.abs(arenaCorners[0][2]-arenaCorners[1][2]);
 
@@ -125,7 +138,7 @@ function processActions() {
             if (typeof commandCooldownLengths[type] === 'undefined') {
                 if (type === 'posa' || type === 'pos1') {
                     botSelection.posa = [Player.getX(),Player.getY(),Player.getZ()];
-                } else if (type === 'posb' || type === 'pos2') { 
+                } else if (type === 'posb' || type === 'pos2') {
                     botSelection.posb = [Player.getX(),Player.getY(),Player.getZ()];
                 }
                 ChatLib.say(commandsToRun[0].command);
@@ -155,9 +168,9 @@ function processActions() {
 
 function defaultCommandTimeoutCallback() {
     // console log the amount of players online, the amount of players in the arena and the timestamp
-    console.warn('Warning: Timeout for command: ' + this.command + ' has occurred.' + '\n' + 
-    '   Players online: ' + gameData.playersInHousing.length + '\n' + 
-    '   Players in arena: ' + gameData.playersInArena.length + '\n' + 
+    console.warn('Warning: Timeout for command: ' + this.command + ' has occurred.' + '\n' +
+    '   Players online: ' + gameData.playersInHousing.length + '\n' +
+    '   Players in arena: ' + gameData.playersInArena.length + '\n' +
     '   Timestamp: ' + new Date(Date.now()).toISOString());
 
 }
@@ -280,42 +293,127 @@ register('tick', () => {
         }
     }
 
+    if (gameLoop) {
+        if (gameData.gameRunning === true) {
+            gameTick()
+        } else {
+            if (checkIfGameReady()) {
+                startGame();
+            }
+        }
+    
+        // end game if it has been more than x minutes since the game started
+        if (Date.now() - gameData.gameStartTimestamp > gameData.gameLength && gameData.gameRunning === true) {
+            endGame();
+        }    
+    }
 
     processActions()
 
 })
 
-function resetMap() {
+function getRandomMap() {
+    var validMaps = Object.keys(maps).filter(map => {
+        return map !== gameData.previousMap;
+    })
+    return validMaps[Math.floor(Math.random() * validMaps.length)];
+}
 
-    // Reset Effects
-    // runCommand('/setbiome jungle')
-    // runCommand('/weather sunny')
+function getRandomFeature(x,y,z) {
+    var validFeatures = Object.keys(features).filter(featureName => {
+        if (getFeatureSize(features[featureName]).toString() === [x,y,z].toString()) {
+            return true;
+        }
+    })
+    return validFeatures[Math.floor(Math.random() * validFeatures.length)];
+}
 
-    // Clear Map Zone
+function getFeatureSize(feature) {
+    return [Math.abs(feature.corners[1][0]-feature.corners[0][0])+1,
+            Math.abs(feature.corners[1][1]-feature.corners[0][1])+1,
+            Math.abs(feature.corners[1][2]-feature.corners[0][2])+1];
+}
+
+function startGame() {
+    gameData.gameStartTimestamp = Date.now();
+    gameData.gameRunning = true;
+    gameData.gameTick = 0;
+    console.log(getRandomMap())
+
+
+    resetArena();
+    // resetDisplays();
+
+    // setPlayerDisplay(gameData.playersInHousing.length);
+
+    loadMapTemplate(gameData.mapSelection)
+
+    // load the maps features
+    for (featureSize in maps[gameData.mapSelection]['feature_placements']) {
+        maps[gameData.mapSelection]['feature_placements'][featureSize].forEach(placementSpot => {
+            var randomFeature = getRandomFeature(...featureSize.split('x'));
+            console.log(randomFeature,placementSpot)
+            if (randomFeature) {
+                loadFeature(randomFeature,placementSpot);
+            }
+        })
+    }
+
+    gameData.previousMap = gameData.mapSelection;
+    // set random map for next game
+    gameData.mapSelection = getRandomMap();
+
+
+
+    ChatLib.chat('the game has started');
+}
+
+// startGame()
+
+function endGame() {
+    gameData.gameRunning = false;
+
+    ChatLib.chat('the game has ended');
+}
+
+function gameTick() {
+    gameData.gameTick++;
+    gameData.lastGameTick = Date.now();
+    console.log(gameData.gameTick);
+}
+
+function resetDisplays() { // the redstone displays
+    new Action({
+        action: function() {
+            runCommand(`/tp ${centerBlock(-44)} ${155} ${centerBlock(-6)}`);
+            runCommand('/pos1');
+
+            runCommand(`/tp ${centerBlock(-53)} ${172} ${centerBlock(49)}`);
+            runCommand('/pos2');
+
+            runCommand('/copy')
+
+            runCommand(`/tp ${centerBlock(-44)} ${174} ${centerBlock(-6)}`);
+            runCommand('/paste')
+        }
+    })
+}
+
+function resetArena() {
     runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[0][1]} ${arenaCorners[0][2]}`)
     runCommand('/pos1')
     runCommand(`/tp ${arenaCorners[1][0]} ${arenaCorners[1][1]} ${arenaCorners[1][2]}`)
     runCommand('/pos2')
     runCommand('/set 0')
-
-    // Reset Timer and Player Count
-    // runCommand('/tp -33.5 155 9.5')
-    // runCommand('/pos1')
-    // runCommand('/tp -52.5 172 52.5')
-    // runCommand('/pos2')
-    // runCommand('/copy')
-    // runCommand('/tp -33.5 174 9.5')
-    // runCommand('/paste')
-
 }
 
 function loadMapTemplate(mapName) {
     const map = maps[mapName];
-
+    console.log(map,mapName)
     // copy map
-    runCommand(`/tp ${map.corners[0].join(' ')}`)
+    runCommand(`/tp ${centerBlock(map.corners[0][0])} ${map.corners[0][1]} ${centerBlock(map.corners[0][2])}`)
     runCommand('/pos1')
-    runCommand(`/tp ${map.corners[1].join(' ')}`)
+    runCommand(`/tp ${centerBlock(map.corners[1][0])} ${map.corners[1][1]} ${centerBlock(map.corners[1][2])}`)
     runCommand('/pos2')
     runCommand('/copy')
 
@@ -328,8 +426,6 @@ function loadMapTemplate(mapName) {
     runCommand('/paste')
     runCommand('/paste')
 }
-
-// loadMapTemplate("flat-grass")
 
 function loadFeature(featureName,pos) {
     const feature = features[featureName];
@@ -349,53 +445,6 @@ function loadFeature(featureName,pos) {
         runCommand('/paste')
     }
 }
-// loadFeature('4x4 test1',[-5, 180, 14+5])
-// loadFeature('4x4 test2',[-5, 180, 14+10])
-// loadFeature('4x4 test3',[-5, 180, 14+15])
-
-// function loadMap() {
-//     var mapName = gameData.mapSelection;
-//     console.log(maps[mapName],mapName)
-//     runCommand(`/tp ${maps[mapName].corners[0].join(' ')}`)
-//     runCommand('/pos1')
-//     runCommand(`/tp ${maps[mapName].corners[1].join(' ')}`)
-//     runCommand('/pos2')
-//     runCommand('/copy')
-    
-//     // Find best spot to put the map in the arena so the map is centered.
-
-//     var depthWidth = getMapDepth()[0]
-//     var depthLength = getMapDepth()[1];
-
-//     runCommand(`/tp ${arenaCorners[0][0]+depthWidth} ${arenaCorners[0][1]+2} ${arenaCorners[0][2]+depthLength}`)
-//     runCommand('/paste')
-
-//     // Teleport players into game
-//     World.getAllPlayers().forEach(player => {
-//         if (coordsInArea([37,150,63],[-31,196,-9],[player.x,player.y,player.z])) {
-//             if (player.name !== 'ImaDoofus') {
-//                 if (maps[mapName]['spawn']) {
-//                     var spawn = maps[mapName].spawn
-//                     runCommand(`/tp ${player.name} ${spawn[0]} ${spawn[1]} ${spawn[2]}`)
-//                 } else {
-//                     runCommand(`/tp ${player.name} -4.5 180 35`)
-//                 }    
-//             }
-//         }
-//     })
-//     runCommand(`/tp ${arenaCorners[0][0]+depthWidth+0.5} ${arenaCorners[0][1]+2} ${arenaCorners[0][2]+depthLength+0.5}`)
-
-//     runCommand('/paste')
-
-//     runCommand('/tp -35.5 180 9.5')
-
-//     runCommand(`/tp ${arenaCorners[0][0]+depthWidth} ${arenaCorners[0][1]+2} ${arenaCorners[0][2]+depthLength}`)
-
-// }
-
-
-
-
 
 function getMapDimensions() {
     var mapName = gameData.mapSelection;
@@ -423,402 +472,408 @@ function getArenaCenter() {
     return [centerWidth, centerLength]
 }
 
-
-// all the "disaster tests" code is old code i will update it later
-
-
-function disasterTestSinkhole() {
-    var centerX = getArenaCenter()[0];
-    var centerZ = getArenaCenter()[1];
+// function disasterTestSinkhole() {
+//     var centerX = getArenaCenter()[0];
+//     var centerZ = getArenaCenter()[1];
     
-    for (var i = 0; i < getMapDimensions()[0]/2; i++) {
-        let dist = i; // https://dzone.com/articles/why-does-javascript-loop-only-use-last-value
-        futureActions.push({
-            run: function() {
-                var blockCount = getMostCommonBlocks(centerX+dist,arenaCorners[0][1],centerZ+dist,centerX-dist,arenaCorners[1][1],centerZ-dist);
+//     for (var i = 0; i < getMapDimensions()[0]/2; i++) {
+//         let dist = i; // https://dzone.com/articles/why-does-javascript-loop-only-use-last-value
+//         futureActions.push({
+//             run: function() {
+//                 var blockCount = getMostCommonBlocks(centerX+dist,arenaCorners[0][1],centerZ+dist,centerX-dist,arenaCorners[1][1],centerZ-dist);
                 
-                var sortable = [];
+//                 var sortable = [];
                 
-                for (block in blockCount) {
-                    if (block === '13') continue;
-                    sortable.push([block,blockCount[block]]);
-                }
+//                 for (block in blockCount) {
+//                     if (block === '13') continue;
+//                     sortable.push([block,blockCount[block]]);
+//                 }
                 
-                sortable.sort(function(a,b) {
-                    return a[1] - b[1];
-                })
+//                 sortable.sort(function(a,b) {
+//                     return a[1] - b[1];
+//                 })
                 
-                console.log(JSON.stringify(sortable))
-                while (sortable.length > 0 && sortable[sortable.length-1][1] > dist * 8) {
-                    console.log(sortable[sortable.length-1][0])
-                    runCommand(`/tp ${centerX+dist} ${arenaCorners[0][1]} ${centerZ+dist}`)
-                    runCommand('/posa')
-                    runCommand(`/tp ${centerX-dist} ${arenaCorners[1][1]} ${centerZ-dist}`)
-                    runCommand('/posb')
-                    runCommand(`/replace ${sortable[sortable.length-1][0]} ${sortable[sortable.length-1][0]},gravel`);
-                    sortable.pop();
-                }
+//                 console.log(JSON.stringify(sortable))
+//                 while (sortable.length > 0 && sortable[sortable.length-1][1] > dist * 8) {
+//                     console.log(sortable[sortable.length-1][0])
+//                     runCommand(`/tp ${centerX+dist} ${arenaCorners[0][1]} ${centerZ+dist}`)
+//                     runCommand('/posa')
+//                     runCommand(`/tp ${centerX-dist} ${arenaCorners[1][1]} ${centerZ-dist}`)
+//                     runCommand('/posb')
+//                     runCommand(`/replace ${sortable[sortable.length-1][0]} ${sortable[sortable.length-1][0]},gravel`);
+//                     sortable.pop();
+//                 }
                 
-                var uncommon = [];
+//                 var uncommon = [];
                 
-                for (block in sortable) {
-                    if (block[1] < dist * 2) {
-                        uncommon.push(block[0]);
-                    }
-                }
+//                 for (block in sortable) {
+//                     if (block[1] < dist * 2) {
+//                         uncommon.push(block[0]);
+//                     }
+//                 }
                 
-                if (dist % 4 === 0) {
-                    if (uncommon.length > 0) {
-                        runCommand(`/tp ${centerX+dist} 156 ${centerZ+dist}`)
-                        runCommand('/posa')
-                        runCommand(`/tp ${centerX-dist} 190 ${centerZ-dist}`)
-                        runCommand('/posb')
-                        runCommand(`/replace ${uncommon.join(',')} ${uncommon.join(',')},gravel`);
-                    }
-                }
+//                 if (dist % 4 === 0) {
+//                     if (uncommon.length > 0) {
+//                         runCommand(`/tp ${centerX+dist} 156 ${centerZ+dist}`)
+//                         runCommand('/posa')
+//                         runCommand(`/tp ${centerX-dist} 190 ${centerZ-dist}`)
+//                         runCommand('/posb')
+//                         runCommand(`/replace ${uncommon.join(',')} ${uncommon.join(',')},gravel`);
+//                     }
+//                 }
                 
-            }
-        })
-    }
-}
+//             }
+//         })
+//     }
+// }
 
-// all the "disaster tests" code is old code i will update it later
-function disasterTestAcidRain() {
-    runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`);
-    runCommand('/posa');
+// function disasterTestAcidRain() {
+//     runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`);
+//     runCommand('/posa');
     
-    for (var i = 0; i < 15; i++) {
-        let dist = i; // https://dzone.com/articles/why-does-javascript-loop-only-use-last-value
+//     for (var i = 0; i < 15; i++) {
+//         let dist = i; // https://dzone.com/articles/why-does-javascript-loop-only-use-last-value
         
-        new Action({
-            action: function() {
+//         new Action({
+//             action: function() {
                 
-                var blockCount = getMostCommonBlocks(arenaCorners[0][0],arenaCorners[1][1],arenaCorners[0][2],arenaCorners[1][0],arenaCorners[1][1]-dist,arenaCorners[1][2]);
-                // console.log(JSON.stringify(blockCount))
+//                 var blockCount = getMostCommonBlocks(arenaCorners[0][0],arenaCorners[1][1],arenaCorners[0][2],arenaCorners[1][0],arenaCorners[1][1]-dist,arenaCorners[1][2]);
+//                 // console.log(JSON.stringify(blockCount))
                 
-                var sortable = [];
+//                 var sortable = [];
                 
-                for (block in blockCount) {
-                    if (block === '95:5' || block === '95:13') continue;
-                    sortable.push([block,blockCount[block]]);
-                }
+//                 for (block in blockCount) {
+//                     if (block === '95:5' || block === '95:13') continue;
+//                     sortable.push([block,blockCount[block]]);
+//                 }
                 
-                sortable.sort(function(a,b) {
-                    return a[1] - b[1];
-                })
+//                 sortable.sort(function(a,b) {
+//                     return a[1] - b[1];
+//                 })
                 
-                for (var j = 0; j < 1; j++) {
-                    if (sortable.length > 0) {
-                        runCommand(`/tp ${arenaCorners[1][0]} ${arenaCorners[1][1]-dist} ${arenaCorners[1][2]}`);
-                        runCommand('/posb');
-                        runCommand(`/replace ${sortable[sortable.length-1][0]} ${sortable[sortable.length-1][0]},95:5,95:13,0`);
-                        console.log(sortable[sortable.length-1][0]);
-                    }
-                    sortable.pop();
-                }
+//                 for (var j = 0; j < 1; j++) {
+//                     if (sortable.length > 0) {
+//                         runCommand(`/tp ${arenaCorners[1][0]} ${arenaCorners[1][1]-dist} ${arenaCorners[1][2]}`);
+//                         runCommand('/posb');
+//                         runCommand(`/replace ${sortable[sortable.length-1][0]} ${sortable[sortable.length-1][0]},95:5,95:13,0`);
+//                         console.log(sortable[sortable.length-1][0]);
+//                     }
+//                     sortable.pop();
+//                 }
                 
-                // Every 4 blocks remove the uncommon blocks
+//                 // Every 4 blocks remove the uncommon blocks
                 
-                var uncommon = [];
+//                 var uncommon = [];
                 
-                for (block in sortable) {
-                    if (block[1] < 30) {
-                        uncommon.push(block[0]);
-                    }
-                }
+//                 for (block in sortable) {
+//                     if (block[1] < 30) {
+//                         uncommon.push(block[0]);
+//                     }
+//                 }
                 
-                // console.log('BLOCK COUNTS: '+JSON.stringify(blockCount))
+//                 // console.log('BLOCK COUNTS: '+JSON.stringify(blockCount))
                 
-                // if (dist % 4 === 0) {
-                    //     if (uncommon.length > 0) {
-                        //         runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`)
-                        //         runCommand('/posa')
-                        //         runCommand(`/tp ${arenaCorners[1][0]} ${arenaCorners[1][1]-dist} ${arenaCorners[1][2]}`)
-                //         runCommand('/posb')
-                //         runCommand(`/replace ${uncommon.join(',')},95:5,95:13 95:5,95:13,0,0,0,0,0,0,0,0`);
-                //     }
-                // }
+//                 // if (dist % 4 === 0) {
+//                     //     if (uncommon.length > 0) {
+//                         //         runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`)
+//                         //         runCommand('/posa')
+//                         //         runCommand(`/tp ${arenaCorners[1][0]} ${arenaCorners[1][1]-dist} ${arenaCorners[1][2]}`)
+//                 //         runCommand('/posb')
+//                 //         runCommand(`/replace ${uncommon.join(',')},95:5,95:13 95:5,95:13,0,0,0,0,0,0,0,0`);
+//                 //     }
+//                 // }
                 
-            }
-        })
-    }
+//             }
+//         })
+//     }
     
-}
-// all the "disaster tests" code is old code i will update it later
+// }
 
-function disasterTestBlizzard() {
-    runCommand('/weather raining')
-    runCommand('/setbiome cold_taiga')
+// function disasterTestBlizzard() {
+//     runCommand('/weather raining')
+//     runCommand('/setbiome cold_taiga')
     
-    for (var i = 0; i < 39; i++) {
-        let dist = i; // https://dzone.com/articles/why-does-javascript-loop-only-use-last-value
+//     for (var i = 0; i < 39; i++) {
+//         let dist = i; // https://dzone.com/articles/why-does-javascript-loop-only-use-last-value
         
-        futureActions.push({
-            run: function() {
-                var blockCount = getMostCommonBlocks(arenaCorners[0][0],arenaCorners[1][1],arenaCorners[0][2],arenaCorners[1][0],arenaCorners[1][1]-dist,arenaCorners[1][2]);
-                // console.log(JSON.stringify(blockCount))
+//         futureActions.push({
+//             run: function() {
+//                 var blockCount = getMostCommonBlocks(arenaCorners[0][0],arenaCorners[1][1],arenaCorners[0][2],arenaCorners[1][0],arenaCorners[1][1]-dist,arenaCorners[1][2]);
+//                 // console.log(JSON.stringify(blockCount))
                 
-                var sortable = [];
+//                 var sortable = [];
                 
-                for (block in blockCount) {
-                    if (block === '80:' || block === '79:' || block === '174:') continue;
-                    sortable.push([block,blockCount[block]]);
-                }
+//                 for (block in blockCount) {
+//                     if (block === '80:' || block === '79:' || block === '174:') continue;
+//                     sortable.push([block,blockCount[block]]);
+//                 }
                 
-                sortable.sort(function(a,b) {
-                    return a[1] - b[1];
-                })
+//                 sortable.sort(function(a,b) {
+//                     return a[1] - b[1];
+//                 })
                 
-                for (var j = 0; j < 2; j++) {
-                    if (sortable.length > 0) {
-                        runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`);
-                        runCommand('/posa');
-                        runCommand(`/tp ${arenaCorners[1][0]} ${arenaCorners[1][1]-dist} ${arenaCorners[1][2]}`);
-                        runCommand('/posb');
-                        runCommand(`/replace ${sortable[sortable.length-1][0]} ${sortable[sortable.length-1][0]},80`);
-                        console.log(`/replace ${sortable[sortable.length-1][0]} ${sortable[sortable.length-1][0]},80`);
-                    }
-                    sortable.pop();
-                }
+//                 for (var j = 0; j < 2; j++) {
+//                     if (sortable.length > 0) {
+//                         runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`);
+//                         runCommand('/posa');
+//                         runCommand(`/tp ${arenaCorners[1][0]} ${arenaCorners[1][1]-dist} ${arenaCorners[1][2]}`);
+//                         runCommand('/posb');
+//                         runCommand(`/replace ${sortable[sortable.length-1][0]} ${sortable[sortable.length-1][0]},80`);
+//                         console.log(`/replace ${sortable[sortable.length-1][0]} ${sortable[sortable.length-1][0]},80`);
+//                     }
+//                     sortable.pop();
+//                 }
                 
-                // Every 4 blocks remove the uncommon blocks
+//                 // Every 4 blocks remove the uncommon blocks
                 
-                var uncommon = [];
+//                 var uncommon = [];
                 
-                for (block in sortable) {
-                    if (block[1] < 30) {
-                        uncommon.push(block[0]);
-                    }
-                }
+//                 for (block in sortable) {
+//                     if (block[1] < 30) {
+//                         uncommon.push(block[0]);
+//                     }
+//                 }
                 
-                // console.log('BLOCK COUNTS: '+JSON.stringify(blockCount))
+//                 // console.log('BLOCK COUNTS: '+JSON.stringify(blockCount))
                 
-                if (dist % 4 === 0) {
-                    if (uncommon.length > 0) {
-                        runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`)
-                        runCommand('/posa')
-                        runCommand(`/tp ${arenaCorners[1][0]} ${arenaCorners[1][1]-dist} ${arenaCorners[1][2]}`)
-                        runCommand('/posb')
-                        runCommand(`/replace ${uncommon.join(',')},80,79,174 80,79,174,0,0,0,0`);
-                    }
-                }
+//                 if (dist % 4 === 0) {
+//                     if (uncommon.length > 0) {
+//                         runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`)
+//                         runCommand('/posa')
+//                         runCommand(`/tp ${arenaCorners[1][0]} ${arenaCorners[1][1]-dist} ${arenaCorners[1][2]}`)
+//                         runCommand('/posb')
+//                         runCommand(`/replace ${uncommon.join(',')},80,79,174 80,79,174,0,0,0,0`);
+//                     }
+//                 }
                 
-                // if (Object.keys(blockCount).length !== 0) {
+//                 // if (Object.keys(blockCount).length !== 0) {
                     
-                    //     var max = Object.keys(blockCount).reduce((a, b) => blockCount[a] > blockCount[b] ? a : b);
+//                     //     var max = Object.keys(blockCount).reduce((a, b) => blockCount[a] > blockCount[b] ? a : b);
                     
-                    //     // console.log(max)
-                    //     runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`)
-                    //     runCommand('/posa')
-                    //     runCommand(`/tp ${arenaCorners[1][0]} ${arenaCorners[1][1]-dist} ${arenaCorners[1][2]}`)
-                    //     runCommand('/posb')
-                    //     runCommand(`/replace ${max},95:5,95:13 ${max},95:5,95:13,0,0,0`);
-                    //     console.log(max)
-                    //     // `/replace ${max},95:5,95:13,159:5,159:13 ${max},${max},${max},${max},${max},95:5,95:13,159:5,159:13,0` 
-                    // };
-                }
-            })
-        }
-    }
-    // all the "disaster tests" code is old code i will update it later
+//                     //     // console.log(max)
+//                     //     runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`)
+//                     //     runCommand('/posa')
+//                     //     runCommand(`/tp ${arenaCorners[1][0]} ${arenaCorners[1][1]-dist} ${arenaCorners[1][2]}`)
+//                     //     runCommand('/posb')
+//                     //     runCommand(`/replace ${max},95:5,95:13 ${max},95:5,95:13,0,0,0`);
+//                     //     console.log(max)
+//                     //     // `/replace ${max},95:5,95:13,159:5,159:13 ${max},${max},${max},${max},${max},95:5,95:13,159:5,159:13,0` 
+//                     // };
+//                 }
+//             })
+//         }
+//     }
     
-    function disasterTestSandstorm() {
-        runCommand('/setbiome desert')
+// function disasterTestSandstorm() {
+//     runCommand('/setbiome desert')
+    
+//     for (var k = 0; k < 1; k++) {
+//         for (var i = 0; i < 39; i++) {
+//             let dist = i; // https://dzone.com/articles/why-does-javascript-loop-only-use-last-value
+            
+//             futureActions.push({
+//                 run: function() {
+//                     var blockCount = getMostCommonBlocks(arenaCorners[0][0],arenaCorners[1][1],arenaCorners[0][2],arenaCorners[1][0],arenaCorners[1][1]-dist,arenaCorners[1][2]);
+//                     // console.log(JSON.stringify(blockCount))
+                    
+//                     var sortable = [];
+                    
+//                     for (block in blockCount) {
+//                         if (block === '12:' || block === '24:') continue;
+//                         sortable.push([block,blockCount[block]]);
+//                     }
+                    
+//                     sortable.sort(function(a,b) {
+//                         return a[1] - b[1];
+//                     })
+
+//                     for (var j = 0; j < 1; j++) {
+//                         if (sortable.length > 0) {
+//                         runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`);
+//                         runCommand('/posa');
+//                         runCommand(`/tp ${arenaCorners[1][0]} ${arenaCorners[1][1]-dist} ${arenaCorners[1][2]}`);
+//                         runCommand('/posb');
+//                         runCommand(`/replace ${sortable[sortable.length-1][0]} ${sortable[sortable.length-1][0]},12`);
+                        
+//                     }
+//                     sortable.pop();
+//                 }
+
+//                 // Every 4 blocks remove the uncommon blocks
+                
+//                 var uncommon = [];
+                
+//                 for (block in sortable) {
+//                     if (block[1] < 30) {
+//                         uncommon.push(block[0]);
+//                     }
+//                 }
+
+//                 // console.log('BLOCK COUNTS: '+JSON.stringify(blockCount))
+                
+//                 if (dist % 4 === 0) {
+//                     if (uncommon.length > 0) {
+//                         runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`)
+//                         runCommand('/posa')
+//                         runCommand(`/tp ${arenaCorners[1][0]} ${arenaCorners[1][1]-dist} ${arenaCorners[1][2]}`)
+//                         runCommand('/posb')
+//                         runCommand(`/replace ${uncommon.join(',')},12,24 12,24,0,0,`);
+//                         runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`);
+//                         runCommand('/posa');
+//                         runCommand(`/tp ${arenaCorners[1][0]} ${arenaCorners[1][1]} ${arenaCorners[1][2]}`);
+//                         runCommand('/posb');
+//                         runCommand(`/replace 0 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,12`);
+//                     }
+//                 }
+                
+//                 // if (Object.keys(blockCount).length !== 0) {
+                    
+//                     //     var max = Object.keys(blockCount).reduce((a, b) => blockCount[a] > blockCount[b] ? a : b);
+                    
+//                     //     // console.log(max)
+//                     //     runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`)
+//                     //     runCommand('/posa')
+//                     //     runCommand(`/tp ${arenaCorners[1][0]} ${arenaCorners[1][1]-dist} ${arenaCorners[1][2]}`)
+//                     //     runCommand('/posb')
+//                     //     runCommand(`/replace ${max},95:5,95:13 ${max},95:5,95:13,0,0,0`);
+//                     //     console.log(max)
+//                 //     // `/replace ${max},95:5,95:13,159:5,159:13 ${max},${max},${max},${max},${max},95:5,95:13,159:5,159:13,0` 
+//                 // };
+//                 }
+//             })
+//         }
+    
+//     }
+    
+// }
+
+// function disasterTestFlood() {
+//     var mapWidth = getMapDimensions()[0];
+//     var mapHeight = getMapDimensions()[1];
+//     var mapLength = getMapDimensions()[2];
+//     console.log(mapLength,mapWidth)
+    
+//     for (var i = 0; i < mapHeight-5; i++) {
+//         let dist = i; // https://dzone.com/articles/why-does-javascript-loop-only-use-last-value
         
-        for (var k = 0; k < 1; k++) {
-            for (var i = 0; i < 39; i++) {
-                let dist = i; // https://dzone.com/articles/why-does-javascript-loop-only-use-last-value
+//         futureActions.push({
+//             run: function() {
                 
-                futureActions.push({
-                    run: function() {
-                        var blockCount = getMostCommonBlocks(arenaCorners[0][0],arenaCorners[1][1],arenaCorners[0][2],arenaCorners[1][0],arenaCorners[1][1]-dist,arenaCorners[1][2]);
-                        // console.log(JSON.stringify(blockCount))
-                        
-                        var sortable = [];
-                        
-                        for (block in blockCount) {
-                            if (block === '12:' || block === '24:') continue;
-                            sortable.push([block,blockCount[block]]);
-                        }
-                        
-                        sortable.sort(function(a,b) {
-                            return a[1] - b[1];
-                        })
-    
-                        for (var j = 0; j < 1; j++) {
-                            if (sortable.length > 0) {
-                            runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`);
-                            runCommand('/posa');
-                            runCommand(`/tp ${arenaCorners[1][0]} ${arenaCorners[1][1]-dist} ${arenaCorners[1][2]}`);
-                            runCommand('/posb');
-                            runCommand(`/replace ${sortable[sortable.length-1][0]} ${sortable[sortable.length-1][0]},12`);
-                            
-                        }
-                        sortable.pop();
-                    }
-    
-                    // Every 4 blocks remove the uncommon blocks
-                    
-                    var uncommon = [];
-                    
-                    for (block in sortable) {
-                        if (block[1] < 30) {
-                            uncommon.push(block[0]);
-                        }
-                    }
-    
-                    // console.log('BLOCK COUNTS: '+JSON.stringify(blockCount))
-                    
-                    if (dist % 4 === 0) {
-                        if (uncommon.length > 0) {
-                            runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`)
-                            runCommand('/posa')
-                            runCommand(`/tp ${arenaCorners[1][0]} ${arenaCorners[1][1]-dist} ${arenaCorners[1][2]}`)
-                            runCommand('/posb')
-                            runCommand(`/replace ${uncommon.join(',')},12,24 12,24,0,0,`);
-                            runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`);
-                            runCommand('/posa');
-                            runCommand(`/tp ${arenaCorners[1][0]} ${arenaCorners[1][1]} ${arenaCorners[1][2]}`);
-                            runCommand('/posb');
-                            runCommand(`/replace 0 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,12`);
-                        }
-                    }
-                    
-                    // if (Object.keys(blockCount).length !== 0) {
-                        
-                        //     var max = Object.keys(blockCount).reduce((a, b) => blockCount[a] > blockCount[b] ? a : b);
-                        
-                        //     // console.log(max)
-                        //     runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`)
-                        //     runCommand('/posa')
-                        //     runCommand(`/tp ${arenaCorners[1][0]} ${arenaCorners[1][1]-dist} ${arenaCorners[1][2]}`)
-                        //     runCommand('/posb')
-                        //     runCommand(`/replace ${max},95:5,95:13 ${max},95:5,95:13,0,0,0`);
-                        //     console.log(max)
-                    //     // `/replace ${max},95:5,95:13,159:5,159:13 ${max},${max},${max},${max},${max},95:5,95:13,159:5,159:13,0` 
-                    // };
-                }
-            })
-        }
-        
+                
+//                 runCommand('/tp -5 95 -38')
+//                 runCommand('/posa')
+//                 runCommand(`/tp -53 95 10`)
+//                 runCommand('/posb')
+//                 runCommand('/copy')
+                
+//                 runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[0][1]+dist} ${arenaCorners[0][2]}`)
+//                 runCommand('/paste')
+//             }
+//         })
+//     }
+// }
+
+// function disasterTestLavaFlood() {
+//     var mapWidth = getMapDimensions()[0];
+//     var mapHeight = getMapDimensions()[1];
+//     var mapLength = getMapDimensions()[2];
+
+//     for (var i = 0; i < mapHeight-5; i++) {
+//         let dist = i; // https://dzone.com/articles/why-does-javascript-loop-only-use-last-value
+
+//         futureActions.push({
+//             run: function() {
+
+
+//                 runCommand('/tp -5 97 -38')
+//                 runCommand('/posa')
+//                 runCommand(`/tp -53 97 10`)
+//                 runCommand('/posb')
+//                 runCommand('/copy')
+
+//                 runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[0][1]+dist} ${arenaCorners[0][2]}`)
+//                 runCommand('/paste')
+//             }
+//         })
+//     }
+// }
+
+// function disasterTestLavaFalls() {
+//     var mapWidth = getMapDimensions()[0];
+//     var mapHeight = getMapDimensions()[1];
+//     var mapLength = getMapDimensions()[2];
+
+//     futureActions.push({
+//         run: function() {
+
+
+//             runCommand('/tp -5 97 -38')
+//             runCommand('/posa')
+//             runCommand(`/tp -53 97 10`)
+//             runCommand('/posb')
+//             runCommand('/copy')
+
+//             runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`)
+//             runCommand('/paste')
+//         }
+//     })
+
+// }
+
+const metadataBlocks = {
+    'colored': [
+        35, // wool
+        159, // terracotta
+        95, // stained glass
+        160 // stained glass pane
+    ],
+    'wood': [
+        5, // planks
+        17, // log
+        18, // leaves somehow (leaves are ignored until hypixel fixes it)
+        126 // slabs
+    ],
+    'slab': [
+        44 // slabs
+    ]
+}
+
+const metadataMapping = {
+    'colored': {
+        'color=white': 0,
+        'color=orange': 1,
+        'color=magenta': 2,
+        'color=light_blue': 3,
+        'color=yellow': 4,
+        'color=lime': 5,
+        'color=pink': 6,
+        'color=gray': 7,
+        'color=light_gray': 8,
+        'color=cyan': 9,
+        'color=purple': 10,
+        'color=blue': 11,
+        'color=brown': 12,
+        'color=green': 13,
+        'color=red': 14,
+        'color=black': 15
+    },
+    'wood': {
+        'variant=oak': 0,
+        'variant=spruce': 1,
+        'variant=birch': 2,
+        'variant=jungle': 3,
+        'variant=acacia': 4,
+        'variant=dark_oak': 5
+    },
+    'slab': {
+        'variant=stone': 0,
+        'variant=sandstone': 2,
+        'variant=cobblestone': 3,
+        'variant=brick': 4,
+        'variant=stone_brick': 5,
+        'variant=nether_brick': 6,
+        'variant=quartz': 7
     }
-    
-}
-
-// all the "disaster tests" code is old code i will update it later
-
-function disasterTestFlood() {
-    var mapWidth = getMapDimensions()[0];
-    var mapHeight = getMapDimensions()[1];
-    var mapLength = getMapDimensions()[2];
-    console.log(mapLength,mapWidth)
-    
-    for (var i = 0; i < mapHeight-5; i++) {
-        let dist = i; // https://dzone.com/articles/why-does-javascript-loop-only-use-last-value
-        
-        futureActions.push({
-            run: function() {
-                
-                
-                runCommand('/tp -5 95 -38')
-                runCommand('/posa')
-                runCommand(`/tp -53 95 10`)
-                runCommand('/posb')
-                runCommand('/copy')
-                
-                runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[0][1]+dist} ${arenaCorners[0][2]}`)
-                runCommand('/paste')
-            }
-        })
-    }
-}
-
-// all the "disaster tests" code is old code i will update it later
-function disasterTestLavaFlood() {
-    var mapWidth = getMapDimensions()[0];
-    var mapHeight = getMapDimensions()[1];
-    var mapLength = getMapDimensions()[2];
-
-    for (var i = 0; i < mapHeight-5; i++) {
-        let dist = i; // https://dzone.com/articles/why-does-javascript-loop-only-use-last-value
-
-        futureActions.push({
-            run: function() {
-
-
-                runCommand('/tp -5 97 -38')
-                runCommand('/posa')
-                runCommand(`/tp -53 97 10`)
-                runCommand('/posb')
-                runCommand('/copy')
-
-                runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[0][1]+dist} ${arenaCorners[0][2]}`)
-                runCommand('/paste')
-            }
-        })
-    }
-}
-// all the "disaster tests" code is old code i will update it later
-
-function disasterTestLavaFalls() {
-    var mapWidth = getMapDimensions()[0];
-    var mapHeight = getMapDimensions()[1];
-    var mapLength = getMapDimensions()[2];
-
-    futureActions.push({
-        run: function() {
-
-
-            runCommand('/tp -5 97 -38')
-            runCommand('/posa')
-            runCommand(`/tp -53 97 10`)
-            runCommand('/posb')
-            runCommand('/copy')
-
-            runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`)
-            runCommand('/paste')
-        }
-    })
-
-}
-
-
-const colorMapping = {
-    'color=white': 0,
-    'color=orange': 1,
-    'color=magenta': 2,
-    'color=light_blue': 3,
-    'color=yellow': 4,
-    'color=lime': 5,
-    'color=pink': 6,
-    'color=gray': 7,
-    'color=light_gray': 8,
-    'color=cyan': 9,
-    'color=purple': 10,
-    'color=blue': 11,
-    'color=brown': 12,
-    'color=green': 13,
-    'color=red': 14,
-    'color=black': 15
-}
-
-const variantMapping = {
-    'variant=oak': 0,
-    'variant=spruce': 1,
-    'variant=birch': 2,
-    'variant=jungle': 3,
-    'variant=acacia': 4,
-    'variant=dark_oak': 5
-}
-
-const slabMapping = {
-    'variant=stone': 0,
-    'variant=sandstone': 2,
-    'variant=cobblestone': 3,
-    'variant=brick': 4,
-    'variant=stone_brick': 5,
-    'variant=nether_brick': 6,
-    'variant=quartz': 7
 }
 
 // excludedBlocks are blocks excluded from the array returned in the getMostCommonBlocks function
@@ -845,60 +900,46 @@ excludedBlocks = [
 function getMostCommonBlocks(x1,y1,z1,x2,y2,z2) {
     var blockCount = {};
 
-    for (var x = 0; x < Math.abs(x1-x2); x++) {
-        for (var y = 0; y < Math.abs(y1-y2); y++) {
-            for (var z = 0; z < Math.abs(z1-z2); z++) {
-                var block = World.getBlockAt(x1+Math.sign(x2-x1)*x,y1+Math.sign(y2-y1)*y,z1+Math.sign(z2-z1)*z)
-                // console.log(x1+Math.sign(x2-x1)*x,y1+Math.sign(y2-y1)*y,z1+Math.sign(z2-z1)*z)
-                
-                // check if block id is in the excludedBlocks array
-                if (excludedBlocks.indexOf(block.getType().getID()) == -1) continue;
+    // for proper looping through the blocks
+    if (x1 > x2) {
+        let temp = x1;
+        x1 = x2;
+        x2 = temp;
+    }
 
-                var blockColor = '';
-                var blockVariant = '';
+    if (y1 > y2) {
+        let temp = y1;
+        y1 = y2;
+        y2 = temp;
+    }
 
-                if (block.getType().getID() === 35 || block.getType().getID() === 159 || block.getType().getID() === 95 || block.getType().getID() === 160 ) {
-                    for(color in colorMapping) {
-                        var metadata = block.getState().toString().match(/\[(.*?)\]/)
-                        if (metadata) {
-                            if (metadata[1].includes(color)) {
-                                blockColor = colorMapping[color];
-                                break;
-                            }
-                        }
-                    }
+    if (z1 > z2) {
+        let temp = z1;
+        z1 = z2;
+        z2 = temp;
+    }
+
+    for (var x = x1; x < x2; x++) {
+        for (var y = y1; y < y2; y++) {
+            for (var z = z1; z < z2; z++) {
+                var block = World.getBlockAt(x,y,z);
+
+                var id = block.getType().getID();
+
+                // continue; if block id is in the excludedBlocks array
+                if (excludedBlocks.indexOf(id) !== -1) continue;
+
+                var variant = getBlockVariant(block);
+
+                var protoolId = id;
+                if (variant) {
+                    protoolId += ':'+variant;
                 }
 
-                if (block.getType().getID() === 5 || block.getType().getID() === 17 || block.getType().getID() === 18 || block.getType().getID() === 126) {
-                    for(variant in variantMapping) {
-                        var metadata = block.getState().toString().match(/\[(.*?)\]/)
-                        if (metadata) {
-                            if (metadata[1].includes(variant)) {
-                                blockVariant = variantMapping[variant];
-                                break;
-                            }
-                        }
-                    }    
-                }
-
-                if (block.getType().getID() === 44) {
-                    for(slab in slabMapping) {
-                        var metadata = block.getState().toString().match(/\[(.*?)\]/)
-
-                        if (metadata) {
-                            if (metadata[1].includes(slab)) {
-                                blockVariant = slabMapping[slab];
-                                break;
-                            }
-                        }
-                    }    
-                }
-                
-                var protoolSafe = block.getType().getID()+':'+blockColor+blockVariant;
-                if (protoolSafe in blockCount) {
-                    blockCount[protoolSafe]++
+                if (protoolId in blockCount) {
+                    blockCount[protoolId]++
                 } else {
-                    blockCount[protoolSafe] = 1;
+                    blockCount[protoolId] = 1;
                 }
             }
         }
@@ -906,39 +947,50 @@ function getMostCommonBlocks(x1,y1,z1,x2,y2,z2) {
     return blockCount;
 }
 
+function getBlockVariant(block) {
+    const id = block.getType().getID();
+    for (blockType in metadataBlocks) {
+        if (metadataBlocks[blockType].indexOf(id) !== -1) {
+            var variant = /(color|variant)=([^,\]]+)/.exec(block.getState().toString()) // extracts something like ['variant=oak']
+            if (variant) {
+                variant = variant[0];
+                for(mapping in metadataMapping[blockType]) {
+                    if (variant === mapping) {
+                        return metadataMapping[blockType][variant];
+                    }
+                }
+            }
+        }
+    }
+}
+
 // teleport the bot to activate redstone that sets the display
-function setPlayerDisplay() {
+function setPlayerDisplay(amount = gameData.playersInArena.length) {
     new Action({
         action: function() {
-            // const playerCount = gameData.playersInArena.length.toString();
-            const playerCount = '15'
-            console.log(playerCount)
-            console.log(`/tp -50 175 ${28-centerBlock(parseInt(playerCount[playerCount.length-1]))}`)
-
-            runCommand(`/tp -50 175 ${28-centerBlock(parseInt(playerCount[playerCount.length-1]))}`)
+            const playerCount = amount.toString()
+            
+            runCommand(`/tp -50 175 ${29-centerBlock(parseInt(playerCount[playerCount.length-1]))}`)
 
             if (playerCount.length > 1) { // if double digits
-                console.log(`/tp -50 175 ${centerBlock(47-playerCount[0])}`)
 
                 runCommand(`/tp -50 175 ${centerBlock(47-playerCount[0])}`)
+
+            } else {
+                runCommand(`/tp -50 175 47.5`)
 
             }
         }
     })
 }
 
-setPlayerDisplay();
-
-// function checkIfGameReady() {
-//     // return true if there are more than 5 players in the world and if it has been at least 30 seconds since the last game
-
-//     if (World.getAllPlayers().length > 5 && (Date.now() - lastGameStart) > 30000) {
-//         return true;
-//     }
-//     return false;
-
-
-// }
+function checkIfGameReady() {
+    // return true if there are more than 5 players in the world and if it has been at least 3 seconds since the last game
+    if (gameData.playersInHousing.length > 1 && (Date.now() - gameData.lastGameTick) > 1000 * 3) {
+        return true;
+    }
+    return false;
+}
 
 // setPlayerDisplay()
 function coordsInArea(position1,position2,coords) {
@@ -962,34 +1014,13 @@ function getEntityPos(entity) {
     return [entity.getX(),entity.getY(),entity.getZ()];
 }
 
-
 function centerBlock(num) {
     // center number to nearest 0.5
     // this took way longer than it should have
     const rem = num % 1;
-    
     if (rem != 0) { // if num is decimal
         return (num < 0 ? Math.floor(num * 2) / 2 : Math.ceil(num * 2) / 2);
     } else {
         return (num < 0 ? Math.floor(num * 2) / 2 + 0.5 : Math.ceil(num * 2) / 2 + 0.5);
-
     }
 }
-
-// function coordsInArea(a,b,c) {
-//     var maxX = Math.max(a[0],b[0]);
-//     var maxY = Math.max(a[1],b[1]);
-//     var maxZ = Math.max(a[2],b[2]);
-//     var minX = Math.min(a[0],b[0]);
-//     var minY = Math.min(a[1],b[1]);
-//     var minZ = Math.min(a[2],b[2]);
-//     // console.log(c[0] < maxX,c[0] > minX,c[1] < maxY, c[1] > minY, c[2] < maxZ, c[2] > minZ)
-
-//     return c[0] < maxX && c[0] > minX && c[1] < maxY && c[1] > minY && c[2] < maxZ && c[2] > minZ;
-// }
-
-
-// console.log(new Sign(World.getBlockAt(44,188,34)).getUnformattedLines()[0])
-// console.log(new Sign(World.getBlockAt(44,188,34)).getUnformattedLines()[1])
-// console.log(new Sign(World.getBlockAt(44,188,34)).getUnformattedLines()[2])
-// console.log(new Sign(World.getBlockAt(44,188,34)).getUnformattedLines()[3])
