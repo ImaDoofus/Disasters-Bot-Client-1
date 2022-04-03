@@ -51,6 +51,12 @@ const features = getJsonFromFile('features');
 
 var botSelection = {posa: [], posb: []};
 
+const infoDisplays = {
+    'donate_a_cookie': [14,174,55],
+    'flood': [14,174,56],
+    'starting_soon': [14,174,57],
+}
+
 var gameLoop = false;
 
 var gameData = {
@@ -60,7 +66,7 @@ var gameData = {
     gameTick: 0,
     gameStartTimestamp: null,
     gameRunning: false,
-    gameLength: 1000 * 30, // 7 seconds
+    gameLength: 1000 * 300, // 300 seconds
     playersInHousing: [],
     playersInArena: [],
 }
@@ -99,6 +105,7 @@ var commandsLastRan = {
     fill: 0,
     cut: 0,
     set: 0,
+    undo: 0,
 }
 var commandCooldownLengths = {
     paste: 5000,
@@ -106,6 +113,7 @@ var commandCooldownLengths = {
     fill: 5000,
     cut: 5000,
     set: 5000,
+    undo: 5000,
 }
 
 function processActions() {
@@ -341,45 +349,105 @@ function startGame() {
     console.log(getRandomMap())
 
 
+    loadInfoDisplay('donate_a_cookie');
     resetArena();
-    // resetDisplays();
+    resetDisplays();
+    setPlayerDisplay(gameData.playersInHousing.length);
 
-    // setPlayerDisplay(gameData.playersInHousing.length);
-
-    loadMapTemplate(gameData.mapSelection)
-
+    loadInfoDisplay('starting_soon');
+    loadMapTemplate(gameData.mapSelection);
+    
+    const map = maps[gameData.mapSelection];
+    
+    spawnMinecarts();
+    
     // load the maps features
-    for (featureSize in maps[gameData.mapSelection]['feature_placements']) {
-        maps[gameData.mapSelection]['feature_placements'][featureSize].forEach(placementSpot => {
+    for (featureSize in map['feature_placements']) {
+        console.log(featureSize)
+        map['feature_placements'][featureSize].forEach(featurePosOnTemplate => {
             var randomFeature = getRandomFeature(...featureSize.split('x'));
-            console.log(randomFeature,placementSpot)
+            console.log(randomFeature,featurePosOnTemplate)
             if (randomFeature) {
-                loadFeature(randomFeature,placementSpot);
+                var pastePos = getFeaturePlacement(gameData.mapSelection,featurePosOnTemplate);
+                loadFeature(randomFeature,pastePos);
             }
         })
     }
+    
+    loadInfoDisplay('flood');
+
+    // start clock countdown
+    startClock()
+
+    disasterTestFlood();
 
     gameData.previousMap = gameData.mapSelection;
     // set random map for next game
-    gameData.mapSelection = getRandomMap();
+    // gameData.mapSelection = getRandomMap();
 
 
 
     ChatLib.chat('the game has started');
 }
 
-// startGame()
+startGame()
+
+function startClock() {
+    new Action({
+        action: function() {
+            runCommand('/tp -45 179 -6')
+        }
+    })
+}
+
+function getFeaturePlacement(mapName,featurePosOnTemplate) {
+    const mapOriginX = centerBlock(arenaCorners[0][0]+getMapDepth(mapName)[0]);
+    const mapOriginZ = centerBlock(arenaCorners[0][2]+getMapDepth(mapName)[1]);
+    const mapOriginY = arenaCorners[0][1]+3;
+
+    const pasteX = mapOriginX+(featurePosOnTemplate[0]-maps[mapName].corners[0][0]);
+    const pasteY = mapOriginY+(featurePosOnTemplate[1]-maps[mapName].corners[0][1]);
+    const pasteZ = mapOriginZ+(featurePosOnTemplate[2]-maps[mapName].corners[0][2]);
+
+    return [pasteX,pasteY,pasteZ]
+}
+
+function loadFeature(featureName,pos) {
+    new Action({
+        action: function() {
+
+            const feature = features[featureName];
+
+            // copy feature
+            runCommand(`/tp ${centerBlock(feature.corners[0][0])} ${centerBlock(feature.corners[0][1])} ${centerBlock(feature.corners[0][2])}`)
+            runCommand('/pos1')
+            runCommand(`/tp ${centerBlock(feature.corners[1][0])} ${centerBlock(feature.corners[1][1])} ${centerBlock(feature.corners[1][2])}`)
+            runCommand('/pos2')
+            runCommand('/copy')
+
+            // paste at correct location
+            runCommand(`/tp ${centerBlock(pos[0])} ${centerBlock(pos[1])} ${centerBlock(pos[2])}`)
+            runCommand('/paste')
+            if (features[featureName].double_paste) {
+                runCommand(`/tp ${centerBlock(pos[0])} ${pos[1]} ${centerBlock(pos[2])}`)
+                runCommand('/paste')
+            }
+        }
+    })
+}
 
 function endGame() {
     gameData.gameRunning = false;
-
+    
     ChatLib.chat('the game has ended');
 }
 
 function gameTick() {
     gameData.gameTick++;
     gameData.lastGameTick = Date.now();
-    console.log(gameData.gameTick);
+    if (gameData.gameTick % 100 === 0) {
+        ChatLib.chat('seconds: ' + gameData.gameTick / 20);
+    }
 }
 
 function resetDisplays() { // the redstone displays
@@ -387,64 +455,126 @@ function resetDisplays() { // the redstone displays
         action: function() {
             runCommand(`/tp ${centerBlock(-44)} ${155} ${centerBlock(-6)}`);
             runCommand('/pos1');
-
+            
             runCommand(`/tp ${centerBlock(-53)} ${172} ${centerBlock(49)}`);
             runCommand('/pos2');
-
+            
             runCommand('/copy')
-
+            
             runCommand(`/tp ${centerBlock(-44)} ${174} ${centerBlock(-6)}`);
             runCommand('/paste')
         }
     })
 }
 
-function resetArena() {
-    runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[0][1]} ${arenaCorners[0][2]}`)
-    runCommand('/pos1')
-    runCommand(`/tp ${arenaCorners[1][0]} ${arenaCorners[1][1]} ${arenaCorners[1][2]}`)
-    runCommand('/pos2')
-    runCommand('/set 0')
+function loadInfoDisplay(id) {
+    new Action({
+        action: function() {
+            const display = infoDisplays[id];
+            runCommand(`/tp ${centerBlock(display[0])} ${centerBlock(display[1])} ${centerBlock(display[2])}`);
+            runCommand('/pos1');
+            runCommand(`/tp ${centerBlock(display[0])-51} ${centerBlock(display[1]+12)} ${centerBlock(display[2])}`);
+            runCommand('/pos2');
+            runCommand('/copy');
+            runCommand(`/tp ${centerBlock(15)} ${181} ${centerBlock(53)}`);
+            runCommand('/paste');
+        }
+    })
 }
+
+
+
+function resetArena() {
+    new Action({
+        action: function() {
+
+            runCommand(`/tp ${centerBlock(arenaCorners[0][0])} ${arenaCorners[0][1]} ${centerBlock(arenaCorners[0][2])}`);
+            runCommand('/pos1');
+            runCommand(`/tp ${centerBlock(arenaCorners[1][0])} ${arenaCorners[1][1]} ${centerBlock(arenaCorners[1][2])}`);
+            runCommand('/pos2');
+            runCommand('/set 0');
+        }
+    })
+}
+
+function spawnMinecarts() {
+    new Action({
+        action: function() {
+
+            // copy & paste rails
+            runCommand(`/tp ${centerBlock(15)} ${centerBlock(154)} ${centerBlock(-1)}`);
+            runCommand('/pos1');
+            runCommand(`/tp ${centerBlock(-43)} ${centerBlock(157)} ${centerBlock(61)}`);
+            runCommand('/pos2');
+            runCommand('/copy');
+            runCommand(`/tp ${centerBlock(18)} ${centerBlock(192)} ${centerBlock(-8)}`);
+            runCommand('/paste');
+            
+            
+            // spawn in minecarts
+            if (Math.random() > 0.5) {
+                runCommand(`/tp ${centerBlock(-41)} ${190} ${centerBlock(55)}`); // 66%
+            } else {
+                runCommand(`/tp ${centerBlock(-41)} ${190} ${centerBlock(61)}`); // 33%
+            }
+            
+            // remove some barriers
+            runCommand(`/tp ${centerBlock(-40)} ${centerBlock(194)} ${centerBlock(52)}`);
+            runCommand('/pos1');
+            runCommand(`/tp ${centerBlock(18)} ${centerBlock(192)} ${centerBlock(-8)}`);
+            runCommand('/pos2');
+            
+
+            // second paste to move out of the way of last minecart row and to allow time for minecarts to travel.
+            runCommand(`/tp ${centerBlock(18)} ${centerBlock(192)} ${centerBlock(-8)}`);
+            runCommand('/paste');
+
+            runCommand('/replace 166 35,35,35,35,35,35,35,35,35,35,35,35,35,35,35,35,35,35,35,35,35,0');
+            runCommand('/replace 35 35:1,35:1,35:1,35:1,35:1,35:1,35:1,35:1,35:1,35:1,35:1,35:1,35:1,35:1,35:1,35:1,35:1,35:1,35:1,0');
+            runCommand('/replace 35:1 35:2,35:2,35:2,35:2,35:2,35:2,35:2,35:2,35:2,35:2,35:2,35:2,35:2,35:2,35:2,35:2,35:2,35:2,35:2,0');
+
+
+            // remove everything (drops minecarts)
+            runCommand('/set 0');
+
+            // undo everything
+            for(var i = 0; i < 6; i++) {
+                runCommand('/undo');              
+            }
+        }
+    })
+}
+
+
+
+
 
 function loadMapTemplate(mapName) {
-    const map = maps[mapName];
-    console.log(map,mapName)
-    // copy map
-    runCommand(`/tp ${centerBlock(map.corners[0][0])} ${map.corners[0][1]} ${centerBlock(map.corners[0][2])}`)
-    runCommand('/pos1')
-    runCommand(`/tp ${centerBlock(map.corners[1][0])} ${map.corners[1][1]} ${centerBlock(map.corners[1][2])}`)
-    runCommand('/pos2')
-    runCommand('/copy')
 
-    // paste the map in the arena (centered)
-    const depthWidth = centerBlock(arenaCorners[0][0]+getMapDepth(mapName)[0],0.5);
-    const depthLength = centerBlock(arenaCorners[0][2]+getMapDepth(mapName)[1],0.5);
-    const depthHeight = arenaCorners[0][1]+3;
+    new Action({
+        action: function() {
 
-    runCommand(`/tp ${depthWidth} ${depthHeight} ${depthLength}`);
-    runCommand('/paste')
-    runCommand('/paste')
+            const map = maps[mapName];
+            console.log(map,mapName)
+            // copy map
+            runCommand(`/tp ${centerBlock(map.corners[0][0])} ${map.corners[0][1]} ${centerBlock(map.corners[0][2])}`)
+            runCommand('/pos1')
+            runCommand(`/tp ${centerBlock(map.corners[1][0])} ${map.corners[1][1]} ${centerBlock(map.corners[1][2])}`)
+            runCommand('/pos2')
+            runCommand('/copy')
+
+            // paste the map in the arena (centered)
+            const depthWidth = centerBlock(arenaCorners[0][0]+getMapDepth(mapName)[0]);
+            const depthLength = centerBlock(arenaCorners[0][2]+getMapDepth(mapName)[1]);
+            const depthHeight = arenaCorners[0][1]+3;
+
+            runCommand(`/tp ${depthWidth} ${depthHeight} ${depthLength}`);
+            runCommand('/paste')
+            runCommand('/paste')
+        }
+    })
 }
 
-function loadFeature(featureName,pos) {
-    const feature = features[featureName];
-
-    // copy feature
-    runCommand(`/tp ${centerBlock(feature.corners[0][0])} ${centerBlock(feature.corners[0][1])} ${centerBlock(feature.corners[0][2])}`)
-    runCommand('/pos1')
-    runCommand(`/tp ${centerBlock(feature.corners[1][0])} ${centerBlock(feature.corners[1][1])} ${centerBlock(feature.corners[1][2])}`)
-    runCommand('/pos2')
-    runCommand('/copy')
-
-    // paste at correct location
-    runCommand(`/tp ${centerBlock(pos[0])} ${centerBlock(pos[1])} ${centerBlock(pos[2])}`)
-    runCommand('/paste')
-    if (features[featureName].double_paste) {
-        runCommand(`/tp ${centerBlock(pos[0])} ${pos[1]} ${centerBlock(pos[2])}`)
-        runCommand('/paste')
-    }
-}
 
 function getMapDimensions() {
     var mapName = gameData.mapSelection;
@@ -472,122 +602,108 @@ function getArenaCenter() {
     return [centerWidth, centerLength]
 }
 
-// function disasterTestSinkhole() {
-//     var centerX = getArenaCenter()[0];
-//     var centerZ = getArenaCenter()[1];
+function disasterTestSinkhole() {
+    var centerX = getArenaCenter()[0];
+    var centerZ = getArenaCenter()[1];
     
-//     for (var i = 0; i < getMapDimensions()[0]/2; i++) {
-//         let dist = i; // https://dzone.com/articles/why-does-javascript-loop-only-use-last-value
-//         futureActions.push({
-//             run: function() {
-//                 var blockCount = getMostCommonBlocks(centerX+dist,arenaCorners[0][1],centerZ+dist,centerX-dist,arenaCorners[1][1],centerZ-dist);
+    for (var i = 0; i < getMapDimensions()[0]/2; i++) {
+        let dist = i; // https://dzone.com/articles/why-does-javascript-loop-only-use-last-value
+        futureActions.push({
+            run: function() {
+                var blockCount = getMostCommonBlocks(centerX+dist,arenaCorners[0][1],centerZ+dist,centerX-dist,arenaCorners[1][1],centerZ-dist);
                 
-//                 var sortable = [];
+                var sortable = [];
                 
-//                 for (block in blockCount) {
-//                     if (block === '13') continue;
-//                     sortable.push([block,blockCount[block]]);
-//                 }
+                for (block in blockCount) {
+                    if (block === '13') continue;
+                    sortable.push([block,blockCount[block]]);
+                }
                 
-//                 sortable.sort(function(a,b) {
-//                     return a[1] - b[1];
-//                 })
+                sortable.sort(function(a,b) {
+                    return a[1] - b[1];
+                })
                 
-//                 console.log(JSON.stringify(sortable))
-//                 while (sortable.length > 0 && sortable[sortable.length-1][1] > dist * 8) {
-//                     console.log(sortable[sortable.length-1][0])
-//                     runCommand(`/tp ${centerX+dist} ${arenaCorners[0][1]} ${centerZ+dist}`)
-//                     runCommand('/posa')
-//                     runCommand(`/tp ${centerX-dist} ${arenaCorners[1][1]} ${centerZ-dist}`)
-//                     runCommand('/posb')
-//                     runCommand(`/replace ${sortable[sortable.length-1][0]} ${sortable[sortable.length-1][0]},gravel`);
-//                     sortable.pop();
-//                 }
+                if (sortable.length > 0) {
+                    runCommand(`/tp ${centerX+dist} ${arenaCorners[0][1]} ${centerZ+dist}`)
+                    runCommand('/posa')
+                    runCommand(`/tp ${centerX-dist} ${arenaCorners[1][1]} ${centerZ-dist}`)
+                    runCommand('/posb')
+                    runCommand(`/replace ${sortable[sortable.length-1][0]} ${sortable[sortable.length-1][0]},gravel`);    
+                }
                 
-//                 var uncommon = [];
+                var uncommon = [];
                 
-//                 for (block in sortable) {
-//                     if (block[1] < dist * 2) {
-//                         uncommon.push(block[0]);
-//                     }
-//                 }
+                for (block in sortable) {
+                    uncommon.push(sortable[block][0]);
+                }
                 
-//                 if (dist % 4 === 0) {
-//                     if (uncommon.length > 0) {
-//                         runCommand(`/tp ${centerX+dist} 156 ${centerZ+dist}`)
-//                         runCommand('/posa')
-//                         runCommand(`/tp ${centerX-dist} 190 ${centerZ-dist}`)
-//                         runCommand('/posb')
-//                         runCommand(`/replace ${uncommon.join(',')} ${uncommon.join(',')},gravel`);
-//                     }
-//                 }
-                
-//             }
-//         })
-//     }
-// }
+                if (dist % 4 === 0) {
+                    if (uncommon.length > 0) {
 
-// function disasterTestAcidRain() {
-//     runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`);
-//     runCommand('/posa');
+                        runCommand(`/tp ${centerX+dist-4} ${arenaCorners[0][1]} ${centerZ+dist-4}`)
+                        runCommand('/posa')
+                        runCommand(`/tp ${centerX-dist+4} ${arenaCorners[1][1]} ${centerZ-dist+4}`)
+                        runCommand('/posb')
+                        runCommand(`/replace ${uncommon.join(',')} gravel`);
+                    }
+                }
+                
+            }
+        })
+    }
+}
+
+function disasterTestAcidRain() {
+    runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`);
+    runCommand('/posa');
     
-//     for (var i = 0; i < 15; i++) {
-//         let dist = i; // https://dzone.com/articles/why-does-javascript-loop-only-use-last-value
+    for (var i = 0; i < 36; i++) {
+        let dist = i; // https://dzone.com/articles/why-does-javascript-loop-only-use-last-value
         
-//         new Action({
-//             action: function() {
+        new Action({
+            action: function() {
+                var blockCount = getMostCommonBlocks(arenaCorners[0][0],arenaCorners[1][1],arenaCorners[0][2],arenaCorners[1][0],arenaCorners[1][1]-dist,arenaCorners[1][2]);
                 
-//                 var blockCount = getMostCommonBlocks(arenaCorners[0][0],arenaCorners[1][1],arenaCorners[0][2],arenaCorners[1][0],arenaCorners[1][1]-dist,arenaCorners[1][2]);
-//                 // console.log(JSON.stringify(blockCount))
+                var sortable = [];
                 
-//                 var sortable = [];
+                for (block in blockCount) {
+                    if (block === '95:5' || block === '95:13') continue;
+                    sortable.push([block,blockCount[block]]);
+                }
                 
-//                 for (block in blockCount) {
-//                     if (block === '95:5' || block === '95:13') continue;
-//                     sortable.push([block,blockCount[block]]);
-//                 }
+                sortable.sort(function(a,b) {
+                    return a[1] - b[1];
+                })
                 
-//                 sortable.sort(function(a,b) {
-//                     return a[1] - b[1];
-//                 })
+                for (var j = 0; j < 1; j++) {
+                    if (sortable.length > 0) {
+                        runCommand(`/tp ${arenaCorners[1][0]} ${arenaCorners[1][1]-dist} ${arenaCorners[1][2]}`);
+                        runCommand('/posb');
+                        runCommand(`/replace ${sortable[sortable.length-1][0]} ${sortable[sortable.length-1][0]},95:5,95:13,0`);
+                        console.log(sortable[sortable.length-1][0]);
+                    }
+                    sortable.pop();
+                }
                 
-//                 for (var j = 0; j < 1; j++) {
-//                     if (sortable.length > 0) {
-//                         runCommand(`/tp ${arenaCorners[1][0]} ${arenaCorners[1][1]-dist} ${arenaCorners[1][2]}`);
-//                         runCommand('/posb');
-//                         runCommand(`/replace ${sortable[sortable.length-1][0]} ${sortable[sortable.length-1][0]},95:5,95:13,0`);
-//                         console.log(sortable[sortable.length-1][0]);
-//                     }
-//                     sortable.pop();
-//                 }
+                // Every 4 blocks remove the uncommon blocks
                 
-//                 // Every 4 blocks remove the uncommon blocks
+                var uncommon = [];
                 
-//                 var uncommon = [];
+                for (block in sortable) {
+                    if (block[1] < 30) {
+                        uncommon.push(block[0]);
+                    }
+                }
                 
-//                 for (block in sortable) {
-//                     if (block[1] < 30) {
-//                         uncommon.push(block[0]);
-//                     }
-//                 }
-                
-//                 // console.log('BLOCK COUNTS: '+JSON.stringify(blockCount))
-                
-//                 // if (dist % 4 === 0) {
-//                     //     if (uncommon.length > 0) {
-//                         //         runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`)
-//                         //         runCommand('/posa')
-//                         //         runCommand(`/tp ${arenaCorners[1][0]} ${arenaCorners[1][1]-dist} ${arenaCorners[1][2]}`)
-//                 //         runCommand('/posb')
-//                 //         runCommand(`/replace ${uncommon.join(',')},95:5,95:13 95:5,95:13,0,0,0,0,0,0,0,0`);
-//                 //     }
-//                 // }
-                
-//             }
-//         })
-//     }
-    
-// }
+                if (dist % 4 === 0) {
+                    if (uncommon.length > 0) {
+                        runCommand(`/replace ${uncommon.join(',')},95:5,95:13 95:5,95:13,0,0,0,0,0,0,0,0`);
+                    }
+                }
+            }
+        })
+    }   
+}
 
 // function disasterTestBlizzard() {
 //     runCommand('/weather raining')
@@ -747,31 +863,29 @@ function getArenaCenter() {
     
 // }
 
-// function disasterTestFlood() {
-//     var mapWidth = getMapDimensions()[0];
-//     var mapHeight = getMapDimensions()[1];
-//     var mapLength = getMapDimensions()[2];
-//     console.log(mapLength,mapWidth)
-    
-//     for (var i = 0; i < mapHeight-5; i++) {
-//         let dist = i; // https://dzone.com/articles/why-does-javascript-loop-only-use-last-value
-        
-//         futureActions.push({
-//             run: function() {
-                
-                
-//                 runCommand('/tp -5 95 -38')
-//                 runCommand('/posa')
-//                 runCommand(`/tp -53 95 10`)
-//                 runCommand('/posb')
-//                 runCommand('/copy')
-                
-//                 runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[0][1]+dist} ${arenaCorners[0][2]}`)
-//                 runCommand('/paste')
-//             }
-//         })
-//     }
-// }
+function disasterTestFlood() {
+    var mapWidth = getMapDimensions()[0];
+    var mapHeight = getMapDimensions()[1];
+    var mapLength = getMapDimensions()[2];
+    console.log(mapLength,mapWidth)
+
+    new Action({
+        action: function() {
+
+            for (var i = 0; i < mapHeight+10; i++) {
+                let dist = i; // https://dzone.com/articles/why-does-javascript-loop-only-use-last-value
+                runCommand('/tp -52.5 97 61.5')
+                runCommand('/posa')
+                runCommand(`/tp 6.5 97 2.5`)
+                runCommand('/posb')
+                runCommand('/copy')
+
+                runCommand(`/tp ${centerBlock(arenaCorners[0][0])} ${arenaCorners[0][1]+dist} ${centerBlock(arenaCorners[0][2])}`)
+                runCommand('/paste')
+            }
+        }
+    })
+}
 
 // function disasterTestLavaFlood() {
 //     var mapWidth = getMapDimensions()[0];
@@ -835,6 +949,9 @@ const metadataBlocks = {
     ],
     'slab': [
         44 // slabs
+    ],
+    'stone': [
+        1, // stone
     ]
 }
 
@@ -873,11 +990,20 @@ const metadataMapping = {
         'variant=stone_brick': 5,
         'variant=nether_brick': 6,
         'variant=quartz': 7
+    },
+    'stone': {
+        'variant=stone': 0,
+        'variant=granite': 1,
+        'variant=smooth_granite': 2,
+        'variant=diorite': 3,
+        'variant=smooth_diorite': 4,
+        'variant=andesite': 5,
+        'variant=smooth_andesite': 6
     }
 }
 
 // excludedBlocks are blocks excluded from the array returned in the getMostCommonBlocks function
-excludedBlocks = [
+const excludedBlocks = [
     0, // air
     13, // gravel
     12, // sand
@@ -963,6 +1089,8 @@ function getBlockVariant(block) {
         }
     }
 }
+
+console.log(World.getBlockAt(-23,95,8).getType().getID())
 
 // teleport the bot to activate redstone that sets the display
 function setPlayerDisplay(amount = gameData.playersInArena.length) {
