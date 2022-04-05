@@ -9,7 +9,6 @@ const buttons = getJsonFromFile('button-data');
 const maps = getJsonFromFile('map-templates');
 const features = getJsonFromFile('features');
 
-
 // World.getAllPlayers().forEach(player => {
 //     player.getActivePotionEffects().forEach(potion => {
 //         console.log(potion.getName())
@@ -108,8 +107,6 @@ var gameData = {
     disasterStartTimestamp: null,
 }
 
-gameData.mapSelection = getRandomMap();
-
 const arenaCorners = [[19,160,-8],[-40,195,51]]
 const arenaWidth = Math.abs(arenaCorners[0][0]-arenaCorners[1][0]);
 const arenaLength = Math.abs(arenaCorners[0][2]-arenaCorners[1][2]);
@@ -145,7 +142,7 @@ var commandsLastRan = {
     undo: 0,
     copy: 0,
 }
-var commandCooldownLengths = {
+const commandCooldownLengths = {
     paste: 5000,
     replace: 5000,
     fill: 5000,
@@ -155,8 +152,18 @@ var commandCooldownLengths = {
     copy: 5000,
 }
 
-function processActions() {
+function init() {
+  gameData.mapSelection = getRandomMap();
 
+  for (var i = 0; i < buttons.length; i++) {
+      var button = buttons[i];
+      if (typeof button.powered === 'undefined') {
+          button.powered = false;
+      }
+  }
+}
+
+function processActions() {
     // if there are no commands to run, run the next action
     if (commandsToRun.length === 0) {
         if (futureActions.length > 0) {
@@ -180,39 +187,43 @@ function processActions() {
 
         // minimum time between commands is 1 second
         if ((Date.now() - commandLastRan) > 1000) {
-
-            let type = commandsToRun[0].command.split(' ')[0].replace(/\//g,'');
-            if (typeof commandCooldownLengths[type] === 'undefined') {
-                if (type === 'posa' || type === 'pos1') {
-                    botSelection.posa = [Player.getX(),Player.getY(),Player.getZ()];
-                } else if (type === 'posb' || type === 'pos2') {
-                    botSelection.posb = [Player.getX(),Player.getY(),Player.getZ()];
+            if (commandsToRun[0] !== null) {
+                let type = commandsToRun[0].command.split(' ')[0].replace(/\//g,'');
+                if (typeof commandCooldownLengths[type] === 'undefined') {
+                    if (type === 'posa' || type === 'pos1') {
+                        botSelection.posa = [Player.getX(),Player.getY(),Player.getZ()];
+                    } else if (type === 'posb' || type === 'pos2') {
+                        botSelection.posb = [Player.getX(),Player.getY(),Player.getZ()];
+                    }
+                    ChatLib.say(commandsToRun[0].command);
+                    commandsToRun.shift();
+                    commandLastRan = Date.now();
+                    return;
                 }
-                ChatLib.say(commandsToRun[0].command);
-                commandsToRun.shift();
-                commandLastRan = Date.now();
-                return;
-            }
-            if ((Date.now() - commandsLastRan[type]) > commandCooldownLengths[type]) {
-                if (type === 'copy') {
-                    botAreaCopied.posa = botSelection.posa;
-                    botAreaCopied.posb = botSelection.posb;
-                }
-                ChatLib.say(commandsToRun[0].command);
-                console.log(commandsToRun[0].command);
-                commandsToRun.shift();
-                commandsLastRan[type] = Date.now();
-                commandLastRan = Date.now();
-            } else {
-                for (i = 0; i < commandsToRun.length; i++) {
-                    let element = commandsToRun[i];
-                    if (element.reorder === true) {
-                        ChatLib.say(commandsToRun[i].command);
-                        commandLastRan = Date.now();
-                        commandsToRun.splice(i--,1);
-                        break;
+                if ((Date.now() - commandsLastRan[type]) > commandCooldownLengths[type]) {
+                    if (type === 'copy') {
+                        botAreaCopied.posa = botSelection.posa;
+                        botAreaCopied.posb = botSelection.posb;
+                    }
+                    ChatLib.say(commandsToRun[0].command);
+                    console.log(commandsToRun[0].command);
+                    commandsToRun.shift();
+                    commandsLastRan[type] = Date.now();
+                    commandLastRan = Date.now();
+                } else {
+                    for (i = 0; i < commandsToRun.length; i++) {
+                        let element = commandsToRun[i];
+                        if (element.reorder === true) {
+                            ChatLib.say(commandsToRun[i].command);
+                            commandLastRan = Date.now();
+                            commandsToRun.splice(i--,1);
+                            break;
+                        }
                     }
                 }
+            } else { //No-op command
+              commandsToRun.shift();
+              commandLastRan = Date.now();
             }
         }
     }
@@ -232,7 +243,7 @@ function defaultCommandTimeoutCallback() {
 // this prevents from the item being used e.g 20 seconds later and instead doesn't use it at all.
 // the item will simply not work for the player.
 
-function runCommand(command,reorder = false,timeout = Infinity, timeoutCallback = defaultCommandTimeoutCallback) {
+function runCommand(command, reorder = false, timeout = Infinity, timeoutCallback = defaultCommandTimeoutCallback) {
     commandsToRun.push({command: command, reorder: reorder, timeout: timeout, timeoutCallback: timeoutCallback, pushed: Date.now()});
 }
 
@@ -240,24 +251,24 @@ var tickNum = 0;
 register('tick', () => {
     tickNum++;
 
-    // set the amount of players in the arena
-    gameData.playersInArena = World.getAllPlayers().filter(player => {
-        if (isPlayer(player)) {
-            return coordsInArea(arenaCorners[0], arenaCorners[1], getEntityPos(player));
-        }
-    });
+    gameData.playersInArena = 0;
+    gameData.playersInHousing = 0;
 
-    // set the amount of players in the housing
-    gameData.playersInHousing = World.getAllPlayers().filter(player => {
-        return isPlayer(player);
+    // set the amount of players in the arena
+    World.getAllPlayers().forEach(player => {
+        if (isPlayer(player)) {
+            gameData.playersInHousing++;
+
+            if (coordsInArea(arenaCorners[0], arenaCorners[1], getEntityPos(player))) {
+                gameData.playersInArena++;
+            }
+        }
     });
 
     // go through each button in the buttons and if it was clicked then run the code for the button
     for(var i = 0; i < buttons.length; i++) {
         var button = buttons[i];
-        if (typeof button.powered === 'undefined') {
-            button.powered = false;
-        }
+
         if (/powered=true|power=1|extended=true/.test(World.getBlockAt(...button.location).getState().toString())) { // works for pistons, buttons, pressure plates
             if (button.powered === false) {
                 switch (button.name) {
@@ -295,6 +306,7 @@ register('tick', () => {
                         });
                         break;
                 }
+
                 button.powered = true;
             }
         } else {
@@ -310,14 +322,14 @@ register('tick', () => {
                 startGame();
             }
         }
-    
+
         // end game if it has been more than x minutes since the game started
         if (Date.now() - gameData.gameStartTimestamp > gameData.gameLength && gameData.gameRunning === true) {
             endGame();
-        }    
+        }
     }
 
-    processActions()
+    processActions();
 
 })
 
@@ -337,10 +349,13 @@ function setWeightedRandomDisaster() {
 }
 
 function getRandomMap() {
-    var validMaps = Object.keys(maps).filter(map => {
-        return map !== gameData.previousMap;
-    })
-    return validMaps[Math.floor(Math.random() * validMaps.length)];
+    var index = Math.floor(Math.random() * validMaps.length;
+
+    if (index >= validMaps.indexOf(gameData.previousMap)) {
+      return validMaps[index + 1];
+    } else {
+      return validMaps[index]
+    }
 }
 
 function getRandomFeature(x,y,z) {
@@ -373,7 +388,7 @@ function startGame() {
     console.log('Disaster:',gameData.disaster);
 
     const map = maps[gameData.mapSelection];
-    
+
     // spawnMinecarts();
 
     // load the maps features
@@ -388,13 +403,11 @@ function startGame() {
             }
         })
     }
-    
+
     // loadInfoDisplay('flood');
 
     // start clock countdown this will start the disasters as well
     startClock()
-
-
 
     gameData.previousMap = gameData.mapSelection;
     // set random map for next game
@@ -496,7 +509,7 @@ function resetDisplays() { // the redstone displays
         action: function() {
             selectRegion(-44,155,-6,-53,172,49);
             runCommand('/copy')
-            
+
             runCommand(`/tp ${centerBlock(-44)} ${174} ${centerBlock(-6)}`);
             runCommand('/paste')
         }
@@ -534,22 +547,22 @@ function spawnMinecarts() {
             runCommand(`/tp ${centerBlock(18)} ${centerBlock(192)} ${centerBlock(-8)}`);
             runCommand('/paste');
             runCommand('/paste');
-            
+
             // select barriers
             selectRegion(-40,194,52,18,192,-8);
-            
+
             // spawn in minecarts
             if (Math.random() > 0.5) {
                 runCommand(`/tp ${centerBlock(-41)} ${190} ${centerBlock(55)}`); // 66%
             } else {
                 runCommand(`/tp ${centerBlock(-41)} ${190} ${centerBlock(61)}`); // 33%
             }
-            
+
             // 4 sec delay
-            runCommand('/spawn');
-            runCommand('/spawn');
-            runCommand('/spawn');
-            runCommand('/spawn');
+            runCommand(null);
+            runCommand(null);
+            runCommand(null);
+            runCommand(null);
 
             // stop minecarts at random points
             runCommand('/replace 166 35,35,35,35,35,35,35,35,35,35,35,35,35,35,35,35,35,35,35,35,35,35,35,35,35,35,35,35,0');
@@ -562,7 +575,7 @@ function spawnMinecarts() {
 
             // undo everything
             for(var i = 0; i < 6; i++) {
-                runCommand('/undo');              
+                runCommand('/undo');
             }
         }
     })
@@ -626,7 +639,7 @@ function floodTick() {
     new Action({
         action: function() {
             var mapHeight = getMapDimensions()[1];
-            
+
             // if flood water isn't selected then select it
             if (!samePositions(botSelection.posa,[-53,95,61])) {
                 runCommand('/tp '+centerBlock(-53)+' '+95+' '+centerBlock(61));
@@ -683,7 +696,7 @@ function sinkholeTick() {
                 runCommand('/posa')
                 runCommand(`/tp ${centerX-progress} ${arenaCorners[1][1]} ${centerZ-progress}`)
                 runCommand('/posb')
-                runCommand(`/replace ${sortedBlockCount[0][0]} ${sortedBlockCount[0][0]},13`);    
+                runCommand(`/replace ${sortedBlockCount[0][0]} ${sortedBlockCount[0][0]},13`);
             }
 
         }
@@ -710,7 +723,7 @@ function midasTick() {
                 runCommand('/posa')
                 runCommand(`/tp ${centerX-progress} ${arenaCorners[1][1]} ${centerZ-progress}`)
                 runCommand('/posb')
-                runCommand(`/replace ${allBlocks.join(',').slice(0,maxChatMessageLength-16).replace(/,[^,]*$/, "")} 41`);
+                runCommand(`/replace ${sliceIdList(allBlocks.join(','), maxChatMessageLength-16)} 41`);
             }
         }
     })
@@ -748,7 +761,7 @@ function acidRainTick() {
                 }
                 runCommand(`/tp ${centerBlock(corner2[0])} ${Math.min(corner2[1]+5,arenaCorners[1][1])} ${centerBlock(corner2[2])}`);
                 runCommand('/posb');
-                runCommand(`/replace ${allBlocks.join(',').slice(0,maxChatMessageLength-22).replace(/,[^,]*$/, "")} 95:5,95:13,0`);
+                runCommand(`/replace ${sliceIdList(allBlocks.join(','), maxChatMessageLength-22)} 95:5,95:13,0`);
             } else if (sortedBlockCount.length > 0) { // if there are more than 20 blocks in region & it is not every 4th layer replace the most common block with 66% acid
                 if (!samePositions(botSelection.posa,corner1)) {
                     runCommand(`/tp ${centerBlock(corner1[0])} ${corner1[1]} ${centerBlock(corner1[2])}`);
@@ -1037,7 +1050,7 @@ const excludedBlocks = [
     43, // double stone slab
 ]
 
-// this function is helpful for disasters like sinkhole where you want to replace the most common blocks 
+// this function is helpful for disasters like sinkhole where you want to replace the most common blocks
 function getMostCommonBlocks(x1,y1,z1,x2,y2,z2) {
     var blockCount = {};
 
@@ -1110,7 +1123,7 @@ function setPlayerDisplay(amount = gameData.playersInArena.length) {
     new Action({
         action: function() {
             const playerCount = amount.toString()
-            
+
             runCommand(`/tp -50 175 ${29-centerBlock(parseInt(playerCount[playerCount.length-1]))}`)
 
             if (playerCount.length > 1) { // if double digits
@@ -1173,7 +1186,21 @@ function selectRegion(x1,y1,z1,x2,y2,z2) {
     runCommand('/pos2');
 }
 
+function sliceIdList(command, size) {
+    if (command.length > size) {
+      if (command.charAt(size) === ',') {
+        return command.slice(0,size);
+      } else {
+        return command.slice(0,size).replace(/,[^,]*$/, "");
+      }
+    } else {
+      return command
+    }
+}
+
 function samePositions(pos1,pos2) {
     // return true if the coords are the same block
     return centerBlock(pos1[0]) === centerBlock(pos2[0]) && centerBlock(pos1[1]) === centerBlock(pos2[1]) && centerBlock(pos1[2]) === centerBlock(pos2[2]);
 }
+
+init();
