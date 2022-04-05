@@ -49,7 +49,16 @@ const features = getJsonFromFile('features');
 //     }
 // });
 
+const maxChatMessageLength = 100;
+
 var botSelection = {posa: [], posb: []};
+var botAreaCopied = {posa: [], posb: []};
+
+const blockLayers = {
+    'lava': [[19,159,-8],[-40,159,51]],
+    'string': [[19,157,-8],[-40,157,51]],
+    'water': [[19,156,-8],[-40,156,51]],
+}
 
 const infoDisplays = {
     'donate_a_cookie': [14,174,55],
@@ -57,7 +66,31 @@ const infoDisplays = {
     'starting_soon': [14,174,57],
 }
 
-var gameLoop = false;
+const mainDisasters = [
+    'flood',
+    'lava_rise',
+    'blizzard',
+    'sandstorm',
+    'acid_rain',
+    'midas',
+    'void',
+    'tnt_rain',
+    'sinkhole',
+]
+
+var disasterVotingWeights = [
+    1, // flood
+    1, // lava rise
+    1, // blizzard
+    100, // sandstorm
+    1, // acid rain
+    1, // midas
+    1, // void
+    1, // tnt rain
+    1, // sinkhole
+]
+
+var gameLoop = true;
 
 var gameData = {
     mapSelection: null,
@@ -66,9 +99,13 @@ var gameData = {
     gameTick: 0,
     gameStartTimestamp: null,
     gameRunning: false,
-    gameLength: 1000 * 300, // 300 seconds
+    gameLength: 1000 * 200, // 30 seconds
     playersInHousing: [],
     playersInArena: [],
+    disaster: null,
+    disasterProgress: 0,
+    disasterSpeed: 1,
+    disasterStartTimestamp: null,
 }
 
 gameData.mapSelection = getRandomMap();
@@ -106,6 +143,7 @@ var commandsLastRan = {
     cut: 0,
     set: 0,
     undo: 0,
+    copy: 0,
 }
 var commandCooldownLengths = {
     paste: 5000,
@@ -114,6 +152,7 @@ var commandCooldownLengths = {
     cut: 5000,
     set: 5000,
     undo: 5000,
+    copy: 5000,
 }
 
 function processActions() {
@@ -155,7 +194,12 @@ function processActions() {
                 return;
             }
             if ((Date.now() - commandsLastRan[type]) > commandCooldownLengths[type]) {
+                if (type === 'copy') {
+                    botAreaCopied.posa = botSelection.posa;
+                    botAreaCopied.posb = botSelection.posb;
+                }
                 ChatLib.say(commandsToRun[0].command);
+                console.log(commandsToRun[0].command);
                 commandsToRun.shift();
                 commandsLastRan[type] = Date.now();
                 commandLastRan = Date.now();
@@ -211,87 +255,44 @@ register('tick', () => {
     // go through each button in the buttons and if it was clicked then run the code for the button
     for(var i = 0; i < buttons.length; i++) {
         var button = buttons[i];
-        if (World.getBlockAt(...button.location).getState().toString().includes('powered=true')) {
+        if (typeof button.powered === 'undefined') {
+            button.powered = false;
+        }
+        if (/powered=true|power=1|extended=true/.test(World.getBlockAt(...button.location).getState().toString())) { // works for pistons, buttons, pressure plates
             if (button.powered === false) {
                 switch (button.name) {
-                    case 'start-game':
-                        loadMap();
+                    case 'vote_flood':
+                        disasterVotingWeights[0]++;
                         break;
-                    case 'reset-map':
-                        resetMap();
+                    case 'vote_lava_rise':
+                        disasterVotingWeights[1]++;
                         break;
-                    case 'clear-queue':
-                        futureActions = [];
-                        commandsToRun = [];
+                    case 'vote_blizzard':
+                        disasterVotingWeights[2]++;
                         break;
-                    case 'disaster-test-sinkhole':
-                        disasterTestSinkhole();
+                    case 'vote_sandstorm':
+                        disasterVotingWeights[3]++;
                         break;
-                    case 'disaster-test-acid-rain':
-                        disasterTestAcidRain();
+                    case 'vote_acid_rain':
+                        disasterVotingWeights[4]++;
                         break;
-                    case 'disaster-test-flood':
-                        disasterTestFlood();
+                    case 'vote_midas':
+                        disasterVotingWeights[5]++;
                         break;
-                    case 'disaster-test-blizzard':
-                        disasterTestBlizzard();
+                    case 'vote_void':
+                        disasterVotingWeights[6]++;
                         break;
-                    case 'disaster-test-lava-flood':
-                        disasterTestLavaFlood();
+                    case 'vote_tnt_rain':
+                        disasterVotingWeights[7]++;
                         break;
-                    case 'disaster-test-sandstorm':
-                        disasterTestSandstorm();
+                    case 'vote_sinkhole':
+                        disasterVotingWeights[8]++;
                         break;
-                    case 'disaster-test-lava-falls':
-                        disasterTestLavaFalls();
-                        break;
-                    case 'checkered_selection':
-                        gameData.mapSelection = 'checkered';
-                        break;
-                    case 'canyon_selection':
-                        gameData.mapSelection = 'canyon';
-                        break;
-                    case 'developer_selection':
-                        gameData.mapSelection = 'developer';
-                        break;
-                    case 'city_selection':
-                        gameData.mapSelection = 'city';
-                        break;
-                    case 'walled_garden_selection':
-                        gameData.mapSelection = 'walled_garden';
-                        break;
-                    case 'mario_kart_selection':
-                        gameData.mapSelection = 'mario_kart';
-                        break;
-                    case 'small_islands_selection':
-                        gameData.mapSelection = 'small_islands';
-                        break;
-                    case 'beach_selection':
-                        gameData.mapSelection = 'beach';
-                        break;
-                    case 'rainbow_selection':
-                        gameData.mapSelection = 'rainbow';
-                        break;
-                    case 'observatory_selection':
-                        gameData.mapSelection = 'observatory';
-                        break;
-                    case 'cosmos_selection':
-                        gameData.mapSelection = 'cosmos';
-                        break;
-                    case 'tall_house_selection':
-                        gameData.mapSelection = 'tall_house';
-                        break;
-                    case 'cliffside_selection':
-                        gameData.mapSelection = 'cliffside';
-                        break;
-                    case 'stellaris_selection':
-                        gameData.mapSelection = 'stellaris';
-                        break;
-                    case 'spooky_selection':
-                        gameData.mapSelection = 'spooky';
-                        break;
-                    case 'log_game_data':
-                        console.log(JSON.stringify(gameData))
+                    case 'log_vote_counts':
+                        var total = disasterVotingWeights.reduce((a,b) => a + b);
+                        disasterVotingWeights.forEach((weight, index) => {
+                            ChatLib.chat(`${mainDisasters[index]}: Weight: ${weight} | Percentage: ${Math.round((weight/total)*100*100)/100}%`);
+                        });
                         break;
                 }
                 button.powered = true;
@@ -320,6 +321,21 @@ register('tick', () => {
 
 })
 
+function setWeightedRandomDisaster() {
+    const cumulativeWeights = [];
+    for (let i = 0; i < disasterVotingWeights.length; i++) {
+        cumulativeWeights.push(disasterVotingWeights[i] + (cumulativeWeights[i - 1] || 0));
+    }
+    const maxWeight = cumulativeWeights[cumulativeWeights.length - 1];
+    const randomWeight = Math.random() * maxWeight;
+    for (let i = 0; i < mainDisasters.length; i++) {
+        if (cumulativeWeights[i] >= randomWeight) {
+            gameData.disaster = mainDisasters[i];
+            break;
+        }
+    }
+}
+
 function getRandomMap() {
     var validMaps = Object.keys(maps).filter(map => {
         return map !== gameData.previousMap;
@@ -345,57 +361,54 @@ function getFeatureSize(feature) {
 function startGame() {
     gameData.gameStartTimestamp = Date.now();
     gameData.gameRunning = true;
-    gameData.gameTick = 0;
-    console.log(getRandomMap())
-
-
-    loadInfoDisplay('donate_a_cookie');
+    // loadInfoDisplay('donate_a_cookie');
     resetArena();
-    resetDisplays();
-    setPlayerDisplay(gameData.playersInHousing.length);
+    // resetDisplays();
+    // setPlayerDisplay(gameData.playersInHousing.length);
 
-    loadInfoDisplay('starting_soon');
+    // loadInfoDisplay('starting_soon');
     loadMapTemplate(gameData.mapSelection);
-    
+    setWeightedRandomDisaster();
+    console.log('Map:',gameData.mapSelection);
+    console.log('Disaster:',gameData.disaster);
+
     const map = maps[gameData.mapSelection];
     
-    spawnMinecarts();
-    
+    // spawnMinecarts();
+
     // load the maps features
     for (featureSize in map['feature_placements']) {
-        console.log(featureSize)
         map['feature_placements'][featureSize].forEach(featurePosOnTemplate => {
             var randomFeature = getRandomFeature(...featureSize.split('x'));
-            console.log(randomFeature,featurePosOnTemplate)
             if (randomFeature) {
                 var pastePos = getFeaturePlacement(gameData.mapSelection,featurePosOnTemplate);
+                console.log(featureSize,randomFeature);
+
                 loadFeature(randomFeature,pastePos);
             }
         })
     }
     
-    loadInfoDisplay('flood');
+    // loadInfoDisplay('flood');
 
-    // start clock countdown
+    // start clock countdown this will start the disasters as well
     startClock()
 
-    disasterTestFlood();
+
 
     gameData.previousMap = gameData.mapSelection;
     // set random map for next game
-    // gameData.mapSelection = getRandomMap();
-
-
+    gameData.mapSelection = getRandomMap();
 
     ChatLib.chat('the game has started');
 }
-
-startGame()
 
 function startClock() {
     new Action({
         action: function() {
             runCommand('/tp -45 179 -6')
+            gameData.gameTick = 0;
+            gameData.disasterStartTimestamp = Date.now();
         }
     })
 }
@@ -419,10 +432,7 @@ function loadFeature(featureName,pos) {
             const feature = features[featureName];
 
             // copy feature
-            runCommand(`/tp ${centerBlock(feature.corners[0][0])} ${centerBlock(feature.corners[0][1])} ${centerBlock(feature.corners[0][2])}`)
-            runCommand('/pos1')
-            runCommand(`/tp ${centerBlock(feature.corners[1][0])} ${centerBlock(feature.corners[1][1])} ${centerBlock(feature.corners[1][2])}`)
-            runCommand('/pos2')
+            selectRegion(feature.corners[0][0],feature.corners[0][1],feature.corners[0][2],feature.corners[1][0],feature.corners[1][1],feature.corners[1][2])
             runCommand('/copy')
 
             // paste at correct location
@@ -438,27 +448,53 @@ function loadFeature(featureName,pos) {
 
 function endGame() {
     gameData.gameRunning = false;
-    
+    gameData.disasterProgress = 0;
+    disasterVotingWeights = disasterVotingWeights.map(weight => 1);
     ChatLib.chat('the game has ended');
 }
 
 function gameTick() {
-    gameData.gameTick++;
     gameData.lastGameTick = Date.now();
-    if (gameData.gameTick % 100 === 0) {
-        ChatLib.chat('seconds: ' + gameData.gameTick / 20);
+    gameData.gameTick++;
+
+    // per tick logic here e.g. kill players standing on gold
+
+    if (gameData.gameTick % Math.round(100/gameData.disasterSpeed) === 1) { // disaster tick
+        switch (gameData.disaster) {
+            case 'sinkhole':
+                sinkholeTick();
+                break;
+            case 'midas':
+                midasTick();
+                break;
+            case 'acid_rain':
+                acidRainTick();
+                break;
+            case 'blizzard':
+                blizzardTick();
+                break;
+            case 'void':
+                voidTick();
+                break;
+            case 'flood':
+                floodTick('water');
+                break;
+            case 'lava_rise':
+                floodTick('lava');
+                break;
+            case 'sandstorm':
+                sandstormTick();
+                break;
+        }
+        gameData.disasterProgress++
     }
+
 }
 
 function resetDisplays() { // the redstone displays
     new Action({
         action: function() {
-            runCommand(`/tp ${centerBlock(-44)} ${155} ${centerBlock(-6)}`);
-            runCommand('/pos1');
-            
-            runCommand(`/tp ${centerBlock(-53)} ${172} ${centerBlock(49)}`);
-            runCommand('/pos2');
-            
+            selectRegion(-44,155,-6,-53,172,49);
             runCommand('/copy')
             
             runCommand(`/tp ${centerBlock(-44)} ${174} ${centerBlock(-6)}`);
@@ -471,10 +507,7 @@ function loadInfoDisplay(id) {
     new Action({
         action: function() {
             const display = infoDisplays[id];
-            runCommand(`/tp ${centerBlock(display[0])} ${centerBlock(display[1])} ${centerBlock(display[2])}`);
-            runCommand('/pos1');
-            runCommand(`/tp ${centerBlock(display[0])-51} ${centerBlock(display[1]+12)} ${centerBlock(display[2])}`);
-            runCommand('/pos2');
+            selectRegion(display[0],display[1],display[2],display[0]-51,display[1]+12,display[2]);
             runCommand('/copy');
             runCommand(`/tp ${centerBlock(15)} ${181} ${centerBlock(53)}`);
             runCommand('/paste');
@@ -482,16 +515,10 @@ function loadInfoDisplay(id) {
     })
 }
 
-
-
 function resetArena() {
     new Action({
         action: function() {
-
-            runCommand(`/tp ${centerBlock(arenaCorners[0][0])} ${arenaCorners[0][1]} ${centerBlock(arenaCorners[0][2])}`);
-            runCommand('/pos1');
-            runCommand(`/tp ${centerBlock(arenaCorners[1][0])} ${arenaCorners[1][1]} ${centerBlock(arenaCorners[1][2])}`);
-            runCommand('/pos2');
+            selectRegion(arenaCorners[0][0],arenaCorners[0][1],arenaCorners[0][2],arenaCorners[1][0],arenaCorners[1][1],arenaCorners[1][2]);
             runCommand('/set 0');
         }
     })
@@ -502,14 +529,14 @@ function spawnMinecarts() {
         action: function() {
 
             // copy & paste rails
-            runCommand(`/tp ${centerBlock(15)} ${centerBlock(154)} ${centerBlock(-1)}`);
-            runCommand('/pos1');
-            runCommand(`/tp ${centerBlock(-43)} ${centerBlock(157)} ${centerBlock(61)}`);
-            runCommand('/pos2');
+            selectRegion(15,153,-1,-43,156,61)
             runCommand('/copy');
             runCommand(`/tp ${centerBlock(18)} ${centerBlock(192)} ${centerBlock(-8)}`);
             runCommand('/paste');
+            runCommand('/paste');
             
+            // select barriers
+            selectRegion(-40,194,52,18,192,-8);
             
             // spawn in minecarts
             if (Math.random() > 0.5) {
@@ -518,20 +545,16 @@ function spawnMinecarts() {
                 runCommand(`/tp ${centerBlock(-41)} ${190} ${centerBlock(61)}`); // 33%
             }
             
-            // remove some barriers
-            runCommand(`/tp ${centerBlock(-40)} ${centerBlock(194)} ${centerBlock(52)}`);
-            runCommand('/pos1');
-            runCommand(`/tp ${centerBlock(18)} ${centerBlock(192)} ${centerBlock(-8)}`);
-            runCommand('/pos2');
-            
+            // 4 sec delay
+            runCommand('/spawn');
+            runCommand('/spawn');
+            runCommand('/spawn');
+            runCommand('/spawn');
 
-            // second paste to move out of the way of last minecart row and to allow time for minecarts to travel.
-            runCommand(`/tp ${centerBlock(18)} ${centerBlock(192)} ${centerBlock(-8)}`);
-            runCommand('/paste');
-
-            runCommand('/replace 166 35,35,35,35,35,35,35,35,35,35,35,35,35,35,35,35,35,35,35,35,35,0');
-            runCommand('/replace 35 35:1,35:1,35:1,35:1,35:1,35:1,35:1,35:1,35:1,35:1,35:1,35:1,35:1,35:1,35:1,35:1,35:1,35:1,35:1,0');
-            runCommand('/replace 35:1 35:2,35:2,35:2,35:2,35:2,35:2,35:2,35:2,35:2,35:2,35:2,35:2,35:2,35:2,35:2,35:2,35:2,35:2,35:2,0');
+            // stop minecarts at random points
+            runCommand('/replace 166 35,35,35,35,35,35,35,35,35,35,35,35,35,35,35,35,35,35,35,35,35,35,35,35,35,35,35,35,0');
+            runCommand('/replace 35 35:1,35:1,35:1,35:1,35:1,35:1,35:1,35:1,35:1,35:1,35:1,35:1,35:1,35:1,35:1,35:1,35:1,35:1,35:1,35:1,35:1,0');
+            runCommand('/replace 35:1 35:2,35:2,35:2,35:2,35:2,35:2,35:2,0');
 
 
             // remove everything (drops minecarts)
@@ -545,22 +568,14 @@ function spawnMinecarts() {
     })
 }
 
-
-
-
-
 function loadMapTemplate(mapName) {
 
     new Action({
         action: function() {
 
             const map = maps[mapName];
-            console.log(map,mapName)
             // copy map
-            runCommand(`/tp ${centerBlock(map.corners[0][0])} ${map.corners[0][1]} ${centerBlock(map.corners[0][2])}`)
-            runCommand('/pos1')
-            runCommand(`/tp ${centerBlock(map.corners[1][0])} ${map.corners[1][1]} ${centerBlock(map.corners[1][2])}`)
-            runCommand('/pos2')
+            selectRegion(map.corners[0][0],map.corners[0][1],map.corners[0][2],map.corners[1][0],map.corners[1][1],map.corners[1][2])
             runCommand('/copy')
 
             // paste the map in the arena (centered)
@@ -574,7 +589,6 @@ function loadMapTemplate(mapName) {
         }
     })
 }
-
 
 function getMapDimensions() {
     var mapName = gameData.mapSelection;
@@ -597,342 +611,338 @@ function getMapDepth(mapName) {
 }
 
 function getArenaCenter() {
-    centerWidth = (-Math.abs(arenaCorners[0][0]-arenaCorners[1][0])/2)+arenaCorners[0][0];
-    centerLength = (Math.abs(arenaCorners[0][2]-arenaCorners[1][2])/2)+arenaCorners[0][2];
+    var centerWidth = (-Math.abs(arenaCorners[0][0]-arenaCorners[1][0])/2)+arenaCorners[0][0];
+    var centerLength = (Math.abs(arenaCorners[0][2]-arenaCorners[1][2])/2)+arenaCorners[0][2];
     return [centerWidth, centerLength]
 }
 
-function disasterTestSinkhole() {
-    var centerX = getArenaCenter()[0];
-    var centerZ = getArenaCenter()[1];
-    
-    for (var i = 0; i < getMapDimensions()[0]/2; i++) {
-        let dist = i; // https://dzone.com/articles/why-does-javascript-loop-only-use-last-value
-        futureActions.push({
-            run: function() {
-                var blockCount = getMostCommonBlocks(centerX+dist,arenaCorners[0][1],centerZ+dist,centerX-dist,arenaCorners[1][1],centerZ-dist);
-                
-                var sortable = [];
-                
-                for (block in blockCount) {
-                    if (block === '13') continue;
-                    sortable.push([block,blockCount[block]]);
-                }
-                
-                sortable.sort(function(a,b) {
-                    return a[1] - b[1];
-                })
-                
-                if (sortable.length > 0) {
-                    runCommand(`/tp ${centerX+dist} ${arenaCorners[0][1]} ${centerZ+dist}`)
-                    runCommand('/posa')
-                    runCommand(`/tp ${centerX-dist} ${arenaCorners[1][1]} ${centerZ-dist}`)
-                    runCommand('/posb')
-                    runCommand(`/replace ${sortable[sortable.length-1][0]} ${sortable[sortable.length-1][0]},gravel`);    
-                }
-                
-                var uncommon = [];
-                
-                for (block in sortable) {
-                    uncommon.push(sortable[block][0]);
-                }
-                
-                if (dist % 4 === 0) {
-                    if (uncommon.length > 0) {
 
-                        runCommand(`/tp ${centerX+dist-4} ${arenaCorners[0][1]} ${centerZ+dist-4}`)
-                        runCommand('/posa')
-                        runCommand(`/tp ${centerX-dist+4} ${arenaCorners[1][1]} ${centerZ-dist+4}`)
-                        runCommand('/posb')
-                        runCommand(`/replace ${uncommon.join(',')} gravel`);
-                    }
-                }
-                
-            }
-        })
-    }
-}
+// --------------------------
+// Code for disasters that runs every disaster tick
+// --------------------------
 
-function disasterTestAcidRain() {
-    runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`);
-    runCommand('/posa');
-    
-    for (var i = 0; i < 36; i++) {
-        let dist = i; // https://dzone.com/articles/why-does-javascript-loop-only-use-last-value
-        
-        new Action({
-            action: function() {
-                var blockCount = getMostCommonBlocks(arenaCorners[0][0],arenaCorners[1][1],arenaCorners[0][2],arenaCorners[1][0],arenaCorners[1][1]-dist,arenaCorners[1][2]);
-                
-                var sortable = [];
-                
-                for (block in blockCount) {
-                    if (block === '95:5' || block === '95:13') continue;
-                    sortable.push([block,blockCount[block]]);
-                }
-                
-                sortable.sort(function(a,b) {
-                    return a[1] - b[1];
-                })
-                
-                for (var j = 0; j < 1; j++) {
-                    if (sortable.length > 0) {
-                        runCommand(`/tp ${arenaCorners[1][0]} ${arenaCorners[1][1]-dist} ${arenaCorners[1][2]}`);
-                        runCommand('/posb');
-                        runCommand(`/replace ${sortable[sortable.length-1][0]} ${sortable[sortable.length-1][0]},95:5,95:13,0`);
-                        console.log(sortable[sortable.length-1][0]);
-                    }
-                    sortable.pop();
-                }
-                
-                // Every 4 blocks remove the uncommon blocks
-                
-                var uncommon = [];
-                
-                for (block in sortable) {
-                    if (block[1] < 30) {
-                        uncommon.push(block[0]);
-                    }
-                }
-                
-                if (dist % 4 === 0) {
-                    if (uncommon.length > 0) {
-                        runCommand(`/replace ${uncommon.join(',')},95:5,95:13 95:5,95:13,0,0,0,0,0,0,0,0`);
-                    }
-                }
-            }
-        })
-    }   
-}
-
-// function disasterTestBlizzard() {
-//     runCommand('/weather raining')
-//     runCommand('/setbiome cold_taiga')
-    
-//     for (var i = 0; i < 39; i++) {
-//         let dist = i; // https://dzone.com/articles/why-does-javascript-loop-only-use-last-value
-        
-//         futureActions.push({
-//             run: function() {
-//                 var blockCount = getMostCommonBlocks(arenaCorners[0][0],arenaCorners[1][1],arenaCorners[0][2],arenaCorners[1][0],arenaCorners[1][1]-dist,arenaCorners[1][2]);
-//                 // console.log(JSON.stringify(blockCount))
-                
-//                 var sortable = [];
-                
-//                 for (block in blockCount) {
-//                     if (block === '80:' || block === '79:' || block === '174:') continue;
-//                     sortable.push([block,blockCount[block]]);
-//                 }
-                
-//                 sortable.sort(function(a,b) {
-//                     return a[1] - b[1];
-//                 })
-                
-//                 for (var j = 0; j < 2; j++) {
-//                     if (sortable.length > 0) {
-//                         runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`);
-//                         runCommand('/posa');
-//                         runCommand(`/tp ${arenaCorners[1][0]} ${arenaCorners[1][1]-dist} ${arenaCorners[1][2]}`);
-//                         runCommand('/posb');
-//                         runCommand(`/replace ${sortable[sortable.length-1][0]} ${sortable[sortable.length-1][0]},80`);
-//                         console.log(`/replace ${sortable[sortable.length-1][0]} ${sortable[sortable.length-1][0]},80`);
-//                     }
-//                     sortable.pop();
-//                 }
-                
-//                 // Every 4 blocks remove the uncommon blocks
-                
-//                 var uncommon = [];
-                
-//                 for (block in sortable) {
-//                     if (block[1] < 30) {
-//                         uncommon.push(block[0]);
-//                     }
-//                 }
-                
-//                 // console.log('BLOCK COUNTS: '+JSON.stringify(blockCount))
-                
-//                 if (dist % 4 === 0) {
-//                     if (uncommon.length > 0) {
-//                         runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`)
-//                         runCommand('/posa')
-//                         runCommand(`/tp ${arenaCorners[1][0]} ${arenaCorners[1][1]-dist} ${arenaCorners[1][2]}`)
-//                         runCommand('/posb')
-//                         runCommand(`/replace ${uncommon.join(',')},80,79,174 80,79,174,0,0,0,0`);
-//                     }
-//                 }
-                
-//                 // if (Object.keys(blockCount).length !== 0) {
-                    
-//                     //     var max = Object.keys(blockCount).reduce((a, b) => blockCount[a] > blockCount[b] ? a : b);
-                    
-//                     //     // console.log(max)
-//                     //     runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`)
-//                     //     runCommand('/posa')
-//                     //     runCommand(`/tp ${arenaCorners[1][0]} ${arenaCorners[1][1]-dist} ${arenaCorners[1][2]}`)
-//                     //     runCommand('/posb')
-//                     //     runCommand(`/replace ${max},95:5,95:13 ${max},95:5,95:13,0,0,0`);
-//                     //     console.log(max)
-//                     //     // `/replace ${max},95:5,95:13,159:5,159:13 ${max},${max},${max},${max},${max},95:5,95:13,159:5,159:13,0` 
-//                     // };
-//                 }
-//             })
-//         }
-//     }
-    
-// function disasterTestSandstorm() {
-//     runCommand('/setbiome desert')
-    
-//     for (var k = 0; k < 1; k++) {
-//         for (var i = 0; i < 39; i++) {
-//             let dist = i; // https://dzone.com/articles/why-does-javascript-loop-only-use-last-value
-            
-//             futureActions.push({
-//                 run: function() {
-//                     var blockCount = getMostCommonBlocks(arenaCorners[0][0],arenaCorners[1][1],arenaCorners[0][2],arenaCorners[1][0],arenaCorners[1][1]-dist,arenaCorners[1][2]);
-//                     // console.log(JSON.stringify(blockCount))
-                    
-//                     var sortable = [];
-                    
-//                     for (block in blockCount) {
-//                         if (block === '12:' || block === '24:') continue;
-//                         sortable.push([block,blockCount[block]]);
-//                     }
-                    
-//                     sortable.sort(function(a,b) {
-//                         return a[1] - b[1];
-//                     })
-
-//                     for (var j = 0; j < 1; j++) {
-//                         if (sortable.length > 0) {
-//                         runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`);
-//                         runCommand('/posa');
-//                         runCommand(`/tp ${arenaCorners[1][0]} ${arenaCorners[1][1]-dist} ${arenaCorners[1][2]}`);
-//                         runCommand('/posb');
-//                         runCommand(`/replace ${sortable[sortable.length-1][0]} ${sortable[sortable.length-1][0]},12`);
-                        
-//                     }
-//                     sortable.pop();
-//                 }
-
-//                 // Every 4 blocks remove the uncommon blocks
-                
-//                 var uncommon = [];
-                
-//                 for (block in sortable) {
-//                     if (block[1] < 30) {
-//                         uncommon.push(block[0]);
-//                     }
-//                 }
-
-//                 // console.log('BLOCK COUNTS: '+JSON.stringify(blockCount))
-                
-//                 if (dist % 4 === 0) {
-//                     if (uncommon.length > 0) {
-//                         runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`)
-//                         runCommand('/posa')
-//                         runCommand(`/tp ${arenaCorners[1][0]} ${arenaCorners[1][1]-dist} ${arenaCorners[1][2]}`)
-//                         runCommand('/posb')
-//                         runCommand(`/replace ${uncommon.join(',')},12,24 12,24,0,0,`);
-//                         runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`);
-//                         runCommand('/posa');
-//                         runCommand(`/tp ${arenaCorners[1][0]} ${arenaCorners[1][1]} ${arenaCorners[1][2]}`);
-//                         runCommand('/posb');
-//                         runCommand(`/replace 0 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,12`);
-//                     }
-//                 }
-                
-//                 // if (Object.keys(blockCount).length !== 0) {
-                    
-//                     //     var max = Object.keys(blockCount).reduce((a, b) => blockCount[a] > blockCount[b] ? a : b);
-                    
-//                     //     // console.log(max)
-//                     //     runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`)
-//                     //     runCommand('/posa')
-//                     //     runCommand(`/tp ${arenaCorners[1][0]} ${arenaCorners[1][1]-dist} ${arenaCorners[1][2]}`)
-//                     //     runCommand('/posb')
-//                     //     runCommand(`/replace ${max},95:5,95:13 ${max},95:5,95:13,0,0,0`);
-//                     //     console.log(max)
-//                 //     // `/replace ${max},95:5,95:13,159:5,159:13 ${max},${max},${max},${max},${max},95:5,95:13,159:5,159:13,0` 
-//                 // };
-//                 }
-//             })
-//         }
-    
-//     }
-    
-// }
-
-function disasterTestFlood() {
-    var mapWidth = getMapDimensions()[0];
-    var mapHeight = getMapDimensions()[1];
-    var mapLength = getMapDimensions()[2];
-    console.log(mapLength,mapWidth)
-
+function floodTick() {
+    var progress = Math.min(gameData.disasterProgress,15);
     new Action({
         action: function() {
+            var mapHeight = getMapDimensions()[1];
+            
+            // if flood water isn't selected then select it
+            if (!samePositions(botSelection.posa,[-53,95,61])) {
+                runCommand('/tp '+centerBlock(-53)+' '+95+' '+centerBlock(61));
+                runCommand('/pos1')
+            }
+            if (!samePositions(botSelection.posb,[6,95,2])) {
+                runCommand('/tp '+centerBlock(6)+' '+95+' '+centerBlock(2));
+                runCommand('/pos2')
+            }
 
-            for (var i = 0; i < mapHeight+10; i++) {
-                let dist = i; // https://dzone.com/articles/why-does-javascript-loop-only-use-last-value
-                runCommand('/tp -52.5 97 61.5')
-                runCommand('/posa')
-                runCommand(`/tp 6.5 97 2.5`)
-                runCommand('/posb')
+            // if flood water isn't copied then copy it
+            if (!samePositions(botAreaCopied.posa,[-53,95,61]) || !samePositions(botAreaCopied.posb,[6,95,2])) {
                 runCommand('/copy')
+            }
 
-                runCommand(`/tp ${centerBlock(arenaCorners[0][0])} ${arenaCorners[0][1]+dist} ${centerBlock(arenaCorners[0][2])}`)
-                runCommand('/paste')
+            // paste flood water in the arena
+            runCommand(`/tp ${centerBlock(arenaCorners[0][0])} ${arenaCorners[0][1]+progress} ${centerBlock(arenaCorners[0][2])}`)
+            runCommand('/paste')
+        }
+    })
+}
+
+function sinkholeTick() {
+    var progress = Math.min(gameData.disasterProgress,30);
+    new Action({
+        action: function() {
+            var centerX = getArenaCenter()[0];
+            var centerZ = getArenaCenter()[1];
+
+            var blockCount = getMostCommonBlocks(centerX+progress,arenaCorners[0][1],centerZ+progress,centerX-progress,arenaCorners[1][1],centerZ-progress);
+
+            var sortedBlockCount = []; // 2 dimensional array [[blockID, count]]
+            for (block in blockCount) {
+                if (block === '13') continue;
+                sortedBlockCount.push([block,blockCount[block]]);
+            }
+            sortedBlockCount.sort((a,b) => b[1] - a[1]); // sort by count
+
+            if (progress % 4 === 0) { // every 4 blocks out replace everything in the middle with air so center looks more like a hole
+                var allBlocks = [];
+                for (block in blockCount) {
+                    if (block === '13') continue;
+                    allBlocks.push(block);
+                }
+                if (allBlocks.length > 0) {
+                    runCommand(`/tp ${centerX+progress-3} ${arenaCorners[0][1]} ${centerZ+progress-3}`)
+                    runCommand('/posa')
+                    runCommand(`/tp ${centerX-progress+3} ${arenaCorners[1][1]} ${centerZ-progress+3}`)
+                    runCommand('/posb')
+                    runCommand(`/replace ${allBlocks.join(',').slice(0,maxChatMessageLength-16).replace(/,\s*$/, "")} 13`);
+                }
+            } else if (sortedBlockCount.length > 0) { // when not every 4 blocks out replace the most common block with 50% gravel
+                runCommand(`/tp ${centerX+progress} ${arenaCorners[0][1]} ${centerZ+progress}`)
+                runCommand('/posa')
+                runCommand(`/tp ${centerX-progress} ${arenaCorners[1][1]} ${centerZ-progress}`)
+                runCommand('/posb')
+                runCommand(`/replace ${sortedBlockCount[0][0]} ${sortedBlockCount[0][0]},13`);    
+            }
+
+        }
+    })
+}
+
+function midasTick() {
+    var progress = Math.min(gameData.disasterProgress,30);
+    new Action({
+        action: function() {
+            var centerX = getArenaCenter()[0];
+            var centerZ = getArenaCenter()[1];
+
+            var blockCount = getMostCommonBlocks(centerX+progress,arenaCorners[0][1],centerZ+progress,centerX-progress,arenaCorners[1][1],centerZ-progress);
+            console.log(progress)
+
+            var allBlocks = [];
+            for (block in blockCount) {
+                if (block === '41') continue;
+                allBlocks.push(block);
+            }
+            if (allBlocks.length > 0) {
+                runCommand(`/tp ${centerX+progress} ${arenaCorners[0][1]} ${centerZ+progress}`)
+                runCommand('/posa')
+                runCommand(`/tp ${centerX-progress} ${arenaCorners[1][1]} ${centerZ-progress}`)
+                runCommand('/posb')
+                runCommand(`/replace ${allBlocks.join(',').slice(0,maxChatMessageLength-16).replace(/,[^,]*$/, "")} 41`);
             }
         }
     })
 }
 
-// function disasterTestLavaFlood() {
-//     var mapWidth = getMapDimensions()[0];
-//     var mapHeight = getMapDimensions()[1];
-//     var mapLength = getMapDimensions()[2];
+function acidRainTick() {
+    var progress = Math.min(gameData.disasterProgress,arenaCorners[1][1]-arenaCorners[0][1]);
+    new Action({
+        action: function() {
+            console.log(progress)
 
-//     for (var i = 0; i < mapHeight-5; i++) {
-//         let dist = i; // https://dzone.com/articles/why-does-javascript-loop-only-use-last-value
+            var corner1 = [arenaCorners[0][0],arenaCorners[1][1],arenaCorners[0][2]];
+            var corner2 = [arenaCorners[1][0],arenaCorners[1][1]-progress,arenaCorners[1][2]];
 
-//         futureActions.push({
-//             run: function() {
+            var blockCount = getMostCommonBlocks(...corner1, ...corner2);
 
+            var sortedBlockCount = []; // 2 dimensional array [[blockID, count]]
 
-//                 runCommand('/tp -5 97 -38')
-//                 runCommand('/posa')
-//                 runCommand(`/tp -53 97 10`)
-//                 runCommand('/posb')
-//                 runCommand('/copy')
+            for (block in blockCount) {
+                if (block === '95:5' || block === '95:13') continue;
+                sortedBlockCount.push([block,blockCount[block]]);
+            }
 
-//                 runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[0][1]+dist} ${arenaCorners[0][2]}`)
-//                 runCommand('/paste')
-//             }
-//         })
-//     }
-// }
+            sortedBlockCount.sort((a,b) => b[1] - a[1]); // sort by count
 
-// function disasterTestLavaFalls() {
-//     var mapWidth = getMapDimensions()[0];
-//     var mapHeight = getMapDimensions()[1];
-//     var mapLength = getMapDimensions()[2];
+            var allBlocks = [];
+            for (block in blockCount) {
+                allBlocks.push(block);
+            }
 
-//     futureActions.push({
-//         run: function() {
+            if (progress % 4 === 3 && allBlocks.length > 0) { // if more than 0 block types in region & a 4th layer replace all of the blocks in the selection+5 on y-axis with acid
+                if (!samePositions(botSelection.posa,corner1)) {
+                    runCommand(`/tp ${centerBlock(corner1[0])} ${corner1[1]} ${centerBlock(corner1[2])}`);
+                    runCommand('/posa');
+                }
+                runCommand(`/tp ${centerBlock(corner2[0])} ${Math.min(corner2[1]+5,arenaCorners[1][1])} ${centerBlock(corner2[2])}`);
+                runCommand('/posb');
+                runCommand(`/replace ${allBlocks.join(',').slice(0,maxChatMessageLength-22).replace(/,[^,]*$/, "")} 95:5,95:13,0`);
+            } else if (sortedBlockCount.length > 0) { // if there are more than 20 blocks in region & it is not every 4th layer replace the most common block with 66% acid
+                if (!samePositions(botSelection.posa,corner1)) {
+                    runCommand(`/tp ${centerBlock(corner1[0])} ${corner1[1]} ${centerBlock(corner1[2])}`);
+                    runCommand('/posa');
+                }
+                runCommand(`/tp ${centerBlock(corner2[0])} ${corner2[1]} ${centerBlock(corner2[2])}`);
+                runCommand('/posb');
+                runCommand(`/replace ${sortedBlockCount[0][0]} ${sortedBlockCount[0][0]},95:5,95:13,0`);
+            } else {
+                // nothing was replaced to acid this layer try on the next layer
+                if (gameData.disasterProgress < arenaCorners[1][1]-arenaCorners[0][1]) {
+                    gameData.disasterProgress++;
+                    acidRainTick();
+                }
+            }
+        }
+    })
 
+}
 
-//             runCommand('/tp -5 97 -38')
-//             runCommand('/posa')
-//             runCommand(`/tp -53 97 10`)
-//             runCommand('/posb')
-//             runCommand('/copy')
+function blizzardTick() {
+    var progress = Math.min(gameData.disasterProgress,arenaCorners[1][1]-arenaCorners[0][1]);
+    new Action({
+        action: function() {
+            var corner1 = [arenaCorners[0][0],arenaCorners[1][1],arenaCorners[0][2]];
+            var corner2 = [arenaCorners[1][0],arenaCorners[1][1]-progress,arenaCorners[1][2]];
 
-//             runCommand(`/tp ${arenaCorners[0][0]} ${arenaCorners[1][1]} ${arenaCorners[0][2]}`)
-//             runCommand('/paste')
-//         }
-//     })
+            var blockCount = getMostCommonBlocks(...corner1, ...corner2);
 
-// }
+            var sortedBlockCount = []; // 2 dimensional array [[blockID, count]]
+
+            for (block in blockCount) {
+                if (block === '79' || block === '80') continue;
+                sortedBlockCount.push([block,blockCount[block]]);
+            }
+
+            sortedBlockCount.sort((a,b) => b[1] - a[1]); // sort by count
+
+            var allBlocks = [];
+            for (block in blockCount) {
+                allBlocks.push(block);
+            }
+
+            if (progress % 4 === 3 && allBlocks.length > 0) { // if more than 0 block types in region & a 4th layer replace all of the blocks in the selection+5 on y-axis with snow
+                if (!samePositions(botSelection.posa,corner1)) {
+                    runCommand(`/tp ${centerBlock(corner1[0])} ${corner1[1]} ${centerBlock(corner1[2])}`);
+                    runCommand('/posa');
+                }
+                runCommand(`/tp ${centerBlock(corner2[0])} ${Math.min(corner2[1]+5,arenaCorners[1][1])} ${centerBlock(corner2[2])}`);
+                runCommand('/posb');
+                runCommand(`/replace ${allBlocks.join(',').slice(0,maxChatMessageLength-17).replace(/,[^,]*$/, "")} 79,80,0`);
+            } else if (sortedBlockCount.length > 0) { // if there are more than 20 blocks in region & it is not every 4th layer replace the most common block with 66% snow
+                if (!samePositions(botSelection.posa,corner1)) {
+                    runCommand(`/tp ${centerBlock(corner1[0])} ${corner1[1]} ${centerBlock(corner1[2])}`);
+                    runCommand('/posa');
+                }
+                runCommand(`/tp ${centerBlock(corner2[0])} ${corner2[1]} ${centerBlock(corner2[2])}`);
+                runCommand('/posb');
+                runCommand(`/replace ${sortedBlockCount[0][0]} ${sortedBlockCount[0][0]},79,80,0`);
+            } else {
+                // nothing was replaced to snow this layer try on the next layer
+                if (gameData.disasterProgress < arenaCorners[1][1]-arenaCorners[0][1]) {
+                    gameData.disasterProgress++;
+                    blizzardTick();
+                }
+            }
+        }
+    })
+}
+
+function voidTick() {
+    var progress = Math.min(gameData.disasterProgress,arenaCorners[1][1]-arenaCorners[0][1]);
+    new Action({
+        action: function() {
+            var corner1 = [arenaCorners[0][0],arenaCorners[0][1]+progress,arenaCorners[0][2]];
+            var corner2 = [arenaCorners[1][0],arenaCorners[0][1]+progress,arenaCorners[1][2]];
+
+            var blockCount = getMostCommonBlocks(...corner1, ...corner2);
+
+            var sortedBlockCount = []; // 2 dimensional array [[blockID, count]]
+
+            for (block in blockCount) {
+                sortedBlockCount.push(block);
+            }
+            sortedBlockCount.sort((a,b) => b[1] - a[1]); // sort by count
+
+            if (progress > 10) {
+                if (!samePositions(botSelection.posa,corner1)) {
+                    runCommand(`/tp ${centerBlock(corner1[0])} ${corner1[1]} ${centerBlock(corner1[2])}`);
+                    runCommand('/posa');
+                }
+                runCommand(`/tp ${centerBlock(corner2[0])} ${corner2[1]} ${centerBlock(corner2[2])}`);
+                runCommand('/posb');
+                runCommand(`/replace ${sortedBlockCount.join(',').slice(0,maxChatMessageLength-12).replace(/,[^,]*$/, "")} 13`);
+                runCommand(`/set 0`);
+                return;
+            }
+
+            selectRegion(...corner1, ...corner2);
+            runCommand(`/tp ${centerBlock(corner1[0])} ${corner1[1]} ${centerBlock(corner1[2])}`);
+
+            if (progress === 0) { // set first layer to coal
+                runCommand(`/set 173`);
+            } else if (progress === 3) { // set base layer of map to dark glass
+                runCommand(`/set 95:15`);
+            } else if (progress === 8) {
+                runCommand(`/set 95:15`);
+            } else if (progress === 9) { // set to string for falling blocks to break
+                selectRegion(blockLayers.string[0][0], blockLayers.string[0][1], blockLayers.string[0][2], blockLayers.string[1][0], blockLayers.string[1][1], blockLayers.string[1][2]);
+                runCommand(`/copy`);
+                runCommand(`/tp ${centerBlock(corner1[0])} ${corner1[1]} ${centerBlock(corner1[2])}`);
+                runCommand(`/paste`);
+            } else if (progress === 10) { // set to air for layer 10
+                runCommand(`/set 0`);
+            } else if (progress % 2 === 0 && progress < 10) { // if even layer & less than 8 set to black glass
+                runCommand('/replace 0 95:15');
+            } else if (progress % 2 === 1 && progress < 10) { // if odd layer & less than 8 set to dark gray glass
+                runCommand('/replace 0 95:7');
+            }
+        }
+    })
+}
+
+function floodTick(type) {
+    var progress = Math.min(gameData.disasterProgress,arenaCorners[1][1]-arenaCorners[0][1]);
+    new Action({
+        action: function() {
+            var corner1 = [arenaCorners[0][0],arenaCorners[0][1]+progress,arenaCorners[0][2]];
+
+            if (type === 'water' || progress === 0) { // hide lava at bottom of arena
+                selectRegion(...corner1, arenaCorners[1][0], arenaCorners[0][1], arenaCorners[1][2]);
+                runCommand(`/set lapis_block`);
+                return;
+            }
+
+            if (!samePositions(botAreaCopied.posa,blockLayers[type][0]) || !samePositions(botAreaCopied.posb,blockLayers[type][1])) {
+                selectRegion(blockLayers[type][0][0], blockLayers[type][0][1], blockLayers[type][0][2], blockLayers[type][1][0], blockLayers[type][1][1], blockLayers[type][1][2]);
+                runCommand(`/copy`);
+            }
+            runCommand(`/tp ${centerBlock(corner1[0])} ${corner1[1]} ${centerBlock(corner1[2])}`);
+            runCommand('/paste');
+        }
+    })
+}
+
+function sandstormTick() {
+    var progress = Math.min(gameData.disasterProgress,arenaCorners[1][1]-arenaCorners[0][1]);
+    new Action({
+        action: function() {
+            var corner1 = [arenaCorners[0][0],arenaCorners[1][1],arenaCorners[0][2]];
+            var corner2 = [arenaCorners[1][0],arenaCorners[1][1]-progress,arenaCorners[1][2]];
+
+            var blockCount = getMostCommonBlocks(...corner1, ...corner2);
+
+            var sortedBlockCount = []; // 2 dimensional array [[blockID, count]]
+
+            for (block in blockCount) {
+                if (block === '12' || block === '24') continue;
+                sortedBlockCount.push([block,blockCount[block]]);
+            }
+
+            sortedBlockCount.sort((a,b) => b[1] - a[1]); // sort by count
+
+            var allBlocks = [];
+            for (block in blockCount) {
+                allBlocks.push(block);
+            }
+
+            if (progress % 4 === 3 && allBlocks.length > 5) { // if more than 5 block types in region & a 4th layer replace all of the blocks in the selection+5 on y-axis with sand
+                if (!samePositions(botSelection.posa,corner1)) {
+                    runCommand(`/tp ${centerBlock(corner1[0])} ${corner1[1]} ${centerBlock(corner1[2])}`);
+                    runCommand('/posa');
+                }
+                runCommand(`/tp ${centerBlock(corner2[0])} ${Math.min(corner2[1]+5,arenaCorners[1][1])} ${centerBlock(corner2[2])}`);
+                runCommand('/posb');
+                runCommand(`/replace ${allBlocks.join(',').slice(0,maxChatMessageLength-17).replace(/,[^,]*$/, "")} 12,24,0`);
+            } else if (sortedBlockCount.length > 50) { // if there are more than 50 blocks in region & it is not every 4th layer replace the most common block with 66% sand
+                if (!samePositions(botSelection.posa,corner1)) {
+                    runCommand(`/tp ${centerBlock(corner1[0])} ${corner1[1]} ${centerBlock(corner1[2])}`);
+                    runCommand('/posa');
+                }
+                runCommand(`/tp ${centerBlock(corner2[0])} ${corner2[1]} ${centerBlock(corner2[2])}`);
+                runCommand('/posb');
+                runCommand(`/replace ${sortedBlockCount[0][0]} ${sortedBlockCount[0][0]},12,24,0`);
+            } else {
+                // nothing was replaced to sand this layer so just spawn a layer of sand at the top layer
+                selectRegion(arenaCorners[0][0], arenaCorners[1][1], arenaCorners[0][2], arenaCorners[1][0], arenaCorners[1][1], arenaCorners[1][2]);
+                runCommand(`/set 12,0,0,0,0`);
+            }
+        }
+    })
+}
+
+function tntTick() {} // TODO
 
 const metadataBlocks = {
     'colored': [
@@ -1020,6 +1030,11 @@ const excludedBlocks = [
     11, // lava
     26, // bed
     97, // stone monster egg
+    117, // brewing stand
+    71, // iron door
+    38, // poppy
+    140, // flower pot
+    43, // double stone slab
 ]
 
 // this function is helpful for disasters like sinkhole where you want to replace the most common blocks 
@@ -1045,9 +1060,9 @@ function getMostCommonBlocks(x1,y1,z1,x2,y2,z2) {
         z2 = temp;
     }
 
-    for (var x = x1; x < x2; x++) {
-        for (var y = y1; y < y2; y++) {
-            for (var z = z1; z < z2; z++) {
+    for (var x = x1; x <= x2; x++) {
+        for (var y = y1; y <= y2; y++) {
+            for (var z = z1; z <= z2; z++) {
                 var block = World.getBlockAt(x,y,z);
 
                 var id = block.getType().getID();
@@ -1089,8 +1104,6 @@ function getBlockVariant(block) {
         }
     }
 }
-
-console.log(World.getBlockAt(-23,95,8).getType().getID())
 
 // teleport the bot to activate redstone that sets the display
 function setPlayerDisplay(amount = gameData.playersInArena.length) {
@@ -1151,4 +1164,16 @@ function centerBlock(num) {
     } else {
         return (num < 0 ? Math.floor(num * 2) / 2 + 0.5 : Math.ceil(num * 2) / 2 + 0.5);
     }
+}
+
+function selectRegion(x1,y1,z1,x2,y2,z2) {
+    runCommand(`/tp ${centerBlock(x1)} ${y1} ${centerBlock(z1)}`);
+    runCommand('/pos1');
+    runCommand(`/tp ${centerBlock(x2)} ${y2} ${centerBlock(z2)}`);
+    runCommand('/pos2');
+}
+
+function samePositions(pos1,pos2) {
+    // return true if the coords are the same block
+    return centerBlock(pos1[0]) === centerBlock(pos2[0]) && centerBlock(pos1[1]) === centerBlock(pos2[1]) && centerBlock(pos1[2]) === centerBlock(pos2[2]);
 }

@@ -1,134 +1,42 @@
 [
-    { 
-        "name": "reset-map",
-        "location": [44, 184, 42],
-        "powered": false
+    {
+        "name": "log_vote_counts",
+        "location": [30,182,-20]
     },
     { 
-        "name": "start-game",
-        "location": [44, 186, 42],
-        "powered": false
-
+        "name": "vote_flood",
+        "location": [-29,193,-15]
     },
     { 
-        "name": "clear-queue",
-        "location": [44, 186, 40],
-        "powered": false
-
+        "name": "vote_lava_rise",
+        "location": [-29,193,-13]
     },
     { 
-        "name": "disaster-test-sinkhole",
-        "location": [44, 186, 27],
-        "powered": false
+        "name": "vote_blizzard",
+        "location": [-32,193,-13]
     },
     { 
-        "name": "disaster-test-acid-rain",
-        "location": [44, 184, 27],
-        "powered": false
+        "name": "vote_acid_rain",
+        "location": [-32,193,-15]
     },
     { 
-        "name": "disaster-test-flood",
-        "location": [44, 186, 29],
-        "powered": false
+        "name": "vote_midas",
+        "location": [-35,193,-13]
     },
     { 
-        "name": "disaster-test-blizzard",
-        "location": [44, 186, 31],
-        "powered": false
+        "name": "vote_void",
+        "location": [-35,193,-15]
     },
     { 
-        "name": "disaster-test-sandstorm",
-        "location": [44, 184, 31],
-        "powered": false
+        "name": "vote_tnt_rain",
+        "location": [-38,193,-13]
     },
     { 
-        "name": "disaster-test-lava-flood",
-        "location": [44, 184, 29],
-        "powered": false
+        "name": "vote_sinkhole",
+        "location": [-38,193,-15]
     },
-    { 
-        "name": "disaster-test-lava-falls",
-        "location": [44, 188, 31],
-        "powered": false
-    },
-    { 
-        "name": "checkered_selection",
-        "location": [44,188,22],
-        "powered": false
-    },
-    { 
-        "name": "developer_selection",
-        "location": [44,186,24],
-        "powered": false
-    },
-    { 
-        "name": "city_selection",
-        "location": [44,184,24],
-        "powered": false
-    },
-    { 
-        "name": "walled_garden_selection",
-        "location": [44,188,16],
-        "powered": false
-    },
-    { 
-        "name": "mario_kart_selection",
-        "location": [44,184,20],
-        "powered": false
-    },
-    { 
-        "name": "rainbow_selection",
-        "location": [44,188,24],
-        "powered": false
-    },
-    { 
-        "name": "tall_house_selection",
-        "location": [44,186,16],
-        "powered": false
-    },
-    { 
-        "name": "small_islands_selection",
-        "location": [44,188,20],
-        "powered": false
-    },
-    { 
-        "name": "cosmos_selection",
-        "location": [44,186,18],
-        "powered": false
-    },
-    { 
-        "name": "cliffside_selection",
-        "location": [44,188,26],
-        "powered": false
-    },
-    { 
-        "name": "observatory_selection",
-        "location": [44,184,16],
-        "powered": false
-    },
-    { 
-        "name": "canyon_selection",
-        "location": [44,188,18],
-        "powered": false
-    },
-    { 
-        "name": "beach_selection",
-        "location": [44,184,18],
-        "powered": false
-    },
-    { 
-        "name": "stellaris_selection",
-        "location": [44,188,28],
-        "powered": false
-    },
-    { 
-        "name": "spooky_selection",
-        "location": [44,188,30],
-        "powered": false
-    },
-    { 
-        "name": "log_game_data",
-        "location": [44,184,40],
-        "powered": false
+    {
+        "name": "vote_sandstorm",
+        "location": [-41,193,-15]
     }
 ]
